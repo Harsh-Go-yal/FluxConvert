@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  clerkId   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  jobs      Job[]
+  usage     Usage?
+}
+
+model Job {
+  id        String   @id @default(uuid())
+  type      String   // PDF_COMPRESS, OCR, BG_REMOVE, etc.
+  status    String   // PENDING, PROCESSING, COMPLETED, FAILED
+  inputUrl  String
+  outputUrl String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Usage {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  totalJobs   Int      @default(0)
+  storageUsed BigInt   @default(0)
+  updatedAt   DateTime @updatedAt
+}

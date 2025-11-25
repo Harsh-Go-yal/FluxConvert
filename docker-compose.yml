@@ -1,0 +1,73 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
+      - CLERK_SECRET_KEY=sk_test_placeholder
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/fluxconvert
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OCR_SERVICE_URL=http://ocr-service:8000
+      - ENHANCE_SERVICE_URL=http://enhance-service:8001
+      - BG_REMOVE_SERVICE_URL=http://bg-remove:8002
+    depends_on:
+      - postgres
+      - redis
+      - ocr-service
+      - enhance-service
+      - bg-remove
+
+  ocr-service:
+    build:
+      context: apps/ocr-service
+    ports:
+      - "8000:8000"
+
+  enhance-service:
+    build:
+      context: apps/enhance-service
+    ports:
+      - "8001:8001"
+
+  bg-remove:
+    build:
+      context: apps/bg-remove
+    ports:
+      - "8002:8002"
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: fluxconvert
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  redis_data:
+  postgres_data:
