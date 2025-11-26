@@ -1,7 +1,7 @@
 ###############################################
 # 1. Builder
 ###############################################
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install dependencies
@@ -17,7 +17,7 @@ RUN npm run build
 ###############################################
 # 2. Runner
 ###############################################
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -26,7 +26,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy next.config.ts (if needed)
+# Copy next config (optional)
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
 EXPOSE 3000
