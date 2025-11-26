@@ -1,73 +1,100 @@
+version: '3.8'
+
 services:
+  # Reverse Proxy (NGINX)
+  reverse-proxy:
+    build: ./reverse-proxy
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+      - api
+    networks:
+      - flux_network
+    restart: unless-stopped
+
+  # Frontend (Next.js)
   web:
     build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    ports:
-      - "3000:3000"
+      context: ./apps/web
+      dockerfile: Dockerfile
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
-      - CLERK_SECRET_KEY=sk_test_placeholder
-    depends_on:
-      - api
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+    networks:
+      - flux_network
+    restart: unless-stopped
 
+  # API Gateway (NestJS)
   api:
     build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    ports:
-      - "3001:3000"
+      context: ./apps/api
+      dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/fluxconvert
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - OCR_SERVICE_URL=http://ocr-service:8000
-      - ENHANCE_SERVICE_URL=http://enhance-service:8001
-      - BG_REMOVE_SERVICE_URL=http://bg-remove:8002
+      - NODE_ENV=production
+      - OCR_SERVICE_URL=http://ocr-service:8001
+      - BG_REMOVE_URL=http://bg-remove-service:8002
+      - ENHANCE_SERVICE_URL=http://enhance-service:8003
+      - PDF_SERVICE_URL=http://pdf-service:8004
     depends_on:
-      - postgres
-      - redis
       - ocr-service
+      - bg-remove-service
       - enhance-service
-      - bg-remove
+      - pdf-service
+    networks:
+      - flux_network
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
+  # Microservices
   ocr-service:
-    build:
-      context: apps/ocr-service
-    ports:
-      - "8000:8000"
+    build: ./apps/ocr-service
+    networks:
+      - flux_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  bg-remove-service:
+    build: ./apps/bg-remove-service
+    networks:
+      - flux_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
   enhance-service:
-    build:
-      context: apps/enhance-service
-    ports:
-      - "8001:8001"
+    build: ./apps/enhance-service
+    networks:
+      - flux_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8003/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
-  bg-remove:
-    build:
-      context: apps/bg-remove
-    ports:
-      - "8002:8002"
+  pdf-service:
+    build: ./apps/pdf-service
+    networks:
+      - flux_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8004/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  postgres:
-    image: postgres:15-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: fluxconvert
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  redis_data:
-  postgres_data:
+networks:
+  flux_network:
+    driver: bridge

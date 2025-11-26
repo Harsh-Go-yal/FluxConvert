@@ -1,28 +1,37 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import Response
-import cv2
-import numpy as np
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import Response, JSONResponse
+from service.enhance_engine import EnhanceEngine
+from utils.file_utils import is_allowed_file
 
 app = FastAPI()
 
-@app.post("/enhance")
-async def enhance_image(file: UploadFile = File(...)):
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    # Auto brightness and contrast
-    # Clip histogram to remove outliers
-    # This is a simple implementation, can be improved
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    cl = clahe.apply(l)
-    limg = cv2.merge((cl,a,b))
-    final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-    
-    # Denoise
-    final = cv2.fastNlMeansDenoisingColored(final, None, 10, 10, 7, 21)
-    
-    res, im_png = cv2.imencode(".png", final)
-    return Response(content=im_png.tobytes(), media_type="image/png")
+@app.get("/")
+def health_check():
+    return {"service": "enhance-service", "status": "running"}
+
+@app.post("/process")
+async def enhance_document(file: UploadFile = File(...)):
+    if not is_allowed_file(file.filename):
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: png, jpg, jpeg, pdf")
+
+    try:
+        content = await file.read()
+        filename = file.filename.lower()
+        
+        if filename.endswith('.pdf'):
+            processed_content = EnhanceEngine.enhance_pdf(content)
+            media_type = "application/pdf"
+            filename_prefix = "enhanced_"
+        else:
+            processed_content = EnhanceEngine.enhance_image(content)
+            media_type = "image/jpeg"
+            filename_prefix = "enhanced_"
+
+        return Response(content=processed_content, media_type=media_type, headers={"Content-Disposition": f"attachment; filename={filename_prefix}{file.filename}"})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8003)

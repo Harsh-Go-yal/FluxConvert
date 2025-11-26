@@ -25,10 +25,14 @@ import { Menu, Zap, User, Settings, CreditCard, LogOut, Sparkles } from "lucide-
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+
+// ... (imports remain the same, remove unused ones if any)
+
 export function Header() {
     const [isOpen, setIsOpen] = useState(false);
 
-    // Group tools by category
+    // ... (toolsByCategory and categories logic remains the same)
     const toolsByCategory = tools.reduce((acc, tool) => {
         if (!acc[tool.category]) {
             acc[tool.category] = [];
@@ -134,40 +138,20 @@ export function Header() {
                             <ThemeToggle />
                         </div>
 
-                        {/* Profile Dropdown */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="rounded-full w-9 h-9 border border-border/50 hover:bg-muted hover:border-border transition-all">
-                                    <User className="w-4 h-4 text-muted-foreground" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 p-2">
-                                <DropdownMenuLabel className="font-normal">
-                                    <div className="flex flex-col space-y-1">
-                                        <p className="text-sm font-medium leading-none">Guest User</p>
-                                        <p className="text-xs leading-none text-muted-foreground">Sign in to save files</p>
-                                    </div>
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="cursor-pointer">
-                                    <User className="mr-2 h-4 w-4" />
-                                    <span>Log in</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer">
-                                    <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
-                                    <span>Sign up</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="cursor-pointer" disabled>
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    <span>Settings</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer" disabled>
-                                    <CreditCard className="mr-2 h-4 w-4" />
-                                    <span>Billing</span>
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        {/* Auth Buttons */}
+                        <div className="flex items-center gap-2">
+                            <SignedOut>
+                                <SignInButton mode="modal">
+                                    <Button variant="ghost" size="sm">Log in</Button>
+                                </SignInButton>
+                                <SignUpButton mode="modal">
+                                    <Button size="sm">Sign up</Button>
+                                </SignUpButton>
+                            </SignedOut>
+                            <SignedIn>
+                                <UserButton afterSignOutUrl="/" />
+                            </SignedIn>
+                        </div>
 
                         {/* Mobile Menu Toggle */}
                         <div className="lg:hidden">
@@ -201,7 +185,11 @@ export function Header() {
                             <Button className="w-full bg-primary/10 text-primary hover:bg-primary/20 border-0">
                                 <Sparkles className="w-4 h-4 mr-2" /> Go Pro
                             </Button>
-                            <Button className="w-full">Log in / Sign up</Button>
+                            <SignedOut>
+                                <SignInButton mode="modal">
+                                    <Button className="w-full">Log in</Button>
+                                </SignInButton>
+                            </SignedOut>
                         </div>
                     </div>
                 )}

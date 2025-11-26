@@ -28,3 +28,27 @@ export async function splitPDF(pdfFile: File): Promise<Uint8Array[]> {
 
     return splitPdfs;
 }
+
+export async function extractPageRange(pdfFile: File, start: number, end: number): Promise<Uint8Array> {
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await PDFDocument.load(arrayBuffer);
+    const pageCount = pdf.getPageCount();
+
+    if (start < 1 || end > pageCount || start > end) {
+        throw new Error("Invalid page range");
+    }
+
+    const newPdf = await PDFDocument.create();
+    // pdf-lib uses 0-based indexing, so we subtract 1 from start and end
+    // however, copyPages takes an array of indices.
+    // We want pages from start to end (inclusive).
+    const indices = [];
+    for (let i = start - 1; i < end; i++) {
+        indices.push(i);
+    }
+
+    const copiedPages = await newPdf.copyPages(pdf, indices);
+    copiedPages.forEach((page) => newPdf.addPage(page));
+
+    return await newPdf.save();
+}

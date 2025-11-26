@@ -1,34 +1,35 @@
-FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat
-ENV NEXT_TELEMETRY_DISABLED=1
-
-FROM base AS builder
+###############################################
+# 1. Builder
+###############################################
+FROM node:18-alpine AS builder
 WORKDIR /app
-COPY . .
-RUN npm install -g turbo
-RUN turbo prune --scope=web --docker
 
-FROM base AS installer
-WORKDIR /app
-COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/package-lock.json ./package-lock.json
+# Install dependencies
+COPY package*.json ./
 RUN npm install
 
-COPY --from=builder /app/out/full/ .
-COPY turbo.json turbo.json
-# Add dummy environment variables for build time (Next.js inlines these)
-ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
-ENV CLERK_SECRET_KEY=sk_test_placeholder
-ENV NEXT_PUBLIC_API_URL=http://localhost:3001
+# Copy project files
+COPY . .
 
-RUN npm run build --filter=web...
+# Build Next.js standalone output
+RUN npm run build
 
-FROM base AS runner
+###############################################
+# 2. Runner
+###############################################
+FROM node:18-alpine AS runner
 WORKDIR /app
-COPY --from=installer /app/apps/web/next.config.ts .
-COPY --from=installer /app/apps/web/package.json .
-COPY --from=installer /app/apps/web/.next/standalone ./
-COPY --from=installer /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=installer /app/apps/web/public ./apps/web/public
+ENV NODE_ENV=production
 
-CMD node apps/web/server.js
+# Copy standalone build
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Copy next.config.ts (if needed)
+COPY --from=builder /app/next.config.ts ./next.config.ts
+
+EXPOSE 3000
+
+# Start standalone server
+CMD ["node", "server.js"]
