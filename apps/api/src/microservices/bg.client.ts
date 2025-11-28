@@ -4,7 +4,7 @@ import { BaseClient } from './base.client';
 @Injectable()
 export class BgClient extends BaseClient {
     constructor() {
-        super('http://localhost:8002', 'BgRemoveService');
+        super(process.env.BG_REMOVE_URL || 'http://localhost:8002', 'BgRemoveService');
     }
 
     async process(fileBuffer: Buffer, filename: string) {

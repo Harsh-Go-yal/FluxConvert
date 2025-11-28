@@ -1,38 +1,21 @@
-### -------------------------
-### 1. Builder Stage
-### -------------------------
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy source and build
+# Copy the entire monorepo
 COPY . .
-RUN npm run build
+# Install dependencies for the whole monorepo
+RUN npm install
+# Build the api app using turbo
+RUN npx turbo run build --filter=api
 
-# Remove dev dependencies (keep only production deps)
-RUN npm prune --omit=dev
-
-
-### -------------------------
-### 2. Runtime Stage
-### -------------------------
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
 
-# Copy pruned production node_modules
+# Copy node_modules and built assets
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/package.json ./package.json
 
-# Copy package.json (needed for Nest runtime)
-COPY --from=builder /app/package*.json ./
-
-# Copy compiled build
-COPY --from=builder /app/dist ./dist
-
-EXPOSE 3000
+EXPOSE 4000
 
 CMD ["node", "dist/main.js"]

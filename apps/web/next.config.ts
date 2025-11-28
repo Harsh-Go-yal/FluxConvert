@@ -8,22 +8,24 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "50mb",
     },
+    // @ts-ignore
+    middlewareClientMaxBodySize: "50mb",
   },
 
   async rewrites() {
     return [
       {
         source: "/convert/:path*",
-        destination: `${process.env.API_URL || "http://api:3000"}/convert/:path*`,
+        destination: `${process.env.API_URL || "http://api:4000"}/convert/:path*`,
       },
       {
         source: "/pdf/:path*",
-        destination: `${process.env.API_URL || "http://api:3000"}/pdf/:path*`,
+        destination: `${process.env.API_URL || "http://api:4000"}/pdf/:path*`,
       },
     ];
   },
 
-  // Optional but recommended for heavy PDF & WASM handling
+  // Recommended for large files (PDF, WASM)
   compress: false,
 };
 

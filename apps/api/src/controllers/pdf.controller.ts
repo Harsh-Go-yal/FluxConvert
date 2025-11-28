@@ -59,7 +59,7 @@ export class PdfController {
     private sendPdfResponse(res: Response, data: any, filename: string) {
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=${filename}`,
+            'Content-Disposition': `attachment; filename="${filename}"`,
         });
         res.send(data);
     }

@@ -6,7 +6,7 @@ import type { AxiosResponse } from 'axios';
 @Injectable()
 export class PdfClient extends BaseClient {
     constructor() {
-        super('http://localhost:8004', 'PdfService');
+        super(process.env.PDF_SERVICE_URL || 'http://localhost:8004', 'PdfService');
     }
 
     async protect(fileBuffer: Buffer, filename: string, password: string) {

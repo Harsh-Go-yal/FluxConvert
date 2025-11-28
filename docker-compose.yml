@@ -1,7 +1,9 @@
 version: '3.8'
 
 services:
-  # Reverse Proxy (NGINX)
+  #########################################
+  # 1. Reverse Proxy (NGINX)
+  #########################################
   reverse-proxy:
     build: ./reverse-proxy
     ports:
@@ -13,86 +15,101 @@ services:
       - flux_network
     restart: unless-stopped
 
-  # Frontend (Next.js)
+  #########################################
+  # 2. Frontend (Next.js)
+  #########################################
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=/api
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://api:4000
+    env_file:
+      - ./apps/web/.env.local
+    ports:
+      - "3000:3000"
     networks:
       - flux_network
     restart: unless-stopped
 
-  # API Gateway (NestJS)
+  #########################################
+  # 3. API Gateway (NestJS)
+  #########################################
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     environment:
       - NODE_ENV=production
+      - PORT=4000
       - OCR_SERVICE_URL=http://ocr-service:8001
       - BG_REMOVE_URL=http://bg-remove-service:8002
       - ENHANCE_SERVICE_URL=http://enhance-service:8003
       - PDF_SERVICE_URL=http://pdf-service:8004
+    expose:
+      - "4000"
     depends_on:
       - ocr-service
       - bg-remove-service
       - enhance-service
       - pdf-service
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4000/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - flux_network
-    healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
 
-  # Microservices
+  #########################################
+  # 4. Microservices (Python)
+  #########################################
   ocr-service:
     build: ./apps/ocr-service
-    networks:
-      - flux_network
+    environment:
+      - PORT=8001
+    expose:
+      - "8001"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/" ]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+    networks:
+      - flux_network
     restart: unless-stopped
 
   bg-remove-service:
     build: ./apps/bg-remove-service
+    environment:
+      - PORT=8002
+    expose:
+      - "8002"
     networks:
       - flux_network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8002/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
 
   enhance-service:
     build: ./apps/enhance-service
+    environment:
+      - PORT=8003
+    expose:
+      - "8003"
     networks:
       - flux_network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8003/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
 
   pdf-service:
     build: ./apps/pdf-service
+    environment:
+      - PORT=8004
+    expose:
+      - "8004"
     networks:
       - flux_network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8004/" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     restart: unless-stopped
 
 networks:

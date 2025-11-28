@@ -4,7 +4,8 @@ WORKDIR /app
 
 # Install system dependencies for OpenCV and pdf2image (poppler)
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
     libgomp1 \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*

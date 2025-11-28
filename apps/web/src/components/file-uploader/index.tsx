@@ -83,6 +83,16 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     }, [initialAction]);
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
+        // Check for file size limit (50MB)
+        const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+        const largeFiles = acceptedFiles.filter(file => file.size > MAX_SIZE);
+
+        if (largeFiles.length > 0) {
+            alert("You are uploading a larger file. To process large files you must take premium service.");
+            // Filter out large files
+            acceptedFiles = acceptedFiles.filter(file => file.size <= MAX_SIZE);
+        }
+
         if (acceptedFiles.length > 0) {
             setFiles(prev => [...prev, ...acceptedFiles]);
             setMode(determineProcessingMode(acceptedFiles[0]));

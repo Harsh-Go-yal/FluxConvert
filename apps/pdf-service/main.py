@@ -12,11 +12,15 @@ def health_check():
 
 @app.post("/protect")
 async def protect_pdf(file: UploadFile = File(...), password: str = Form(...)):
+    print(f"Received request to protect file: {file.filename}")
     try:
         content = await file.read()
+        print(f"File read successfully, size: {len(content)} bytes")
         protected_pdf = PdfEngine.protect_pdf(content, password)
+        print(f"PDF protected successfully, size: {len(protected_pdf)} bytes")
         return Response(content=protected_pdf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=protected_{file.filename}"})
     except Exception as e:
+        print(f"Error protecting PDF: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/unlock")
