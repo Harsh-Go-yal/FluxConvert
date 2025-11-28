@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@flux/ui", "@flux/utils"],
+  transpilePackages: ["@flux/ui", "@flux/utils", "@flux/wasm"],
   output: "standalone",
 
   experimental: {

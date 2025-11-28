@@ -3,6 +3,8 @@ WORKDIR /app
 # Copy the entire monorepo
 COPY . .
 # Install dependencies for the whole monorepo
+RUN apk add --no-cache dos2unix
+RUN dos2unix packages/wasm/build.sh && chmod +x packages/wasm/build.sh
 RUN npm install
 # Build the api app using turbo
 RUN npx turbo run build --filter=api

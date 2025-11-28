@@ -9,7 +9,7 @@
         "pkg"
     ],
     "scripts": {
-        "build": "./build.sh",
+        "build": "sh build.sh",
         "test": "cargo test"
     },
     "keywords": [

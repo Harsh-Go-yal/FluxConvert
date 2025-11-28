@@ -11,7 +11,7 @@ pub fn split_pdf(file: Vec<u8>) -> Result<Box<[JsValue]>, JsValue> {
     let mut result = Vec::new();
     
     // Iterate over pages and save each as a new document
-    for (page_num, _object_id) in doc.get_pages() {
+    for (_page_num, _object_id) in doc.get_pages() {
         // In a real implementation, we would extract the page and its resources
         // and create a new Document.
         // For now, we will just return the original file as a single "split" part

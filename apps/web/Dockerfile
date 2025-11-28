@@ -1,8 +1,22 @@
+# Stage 1: Build WASM
+FROM rust:1.83-slim-bookworm as wasm-builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl
+# Install wasm-pack
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+COPY packages/wasm ./packages/wasm
+WORKDIR /app/packages/wasm
+RUN wasm-pack build --target web --release --out-dir pkg
+
 FROM node:20-alpine AS builder
 WORKDIR /app
 # Copy the entire monorepo
 COPY . .
+# Copy pre-built WASM
+COPY --from=wasm-builder /app/packages/wasm/pkg ./packages/wasm/pkg
 # Install dependencies for the whole monorepo
+RUN apk add --no-cache dos2unix
+RUN dos2unix packages/wasm/build.sh && chmod +x packages/wasm/build.sh
 RUN npm install
 # Build the web app using turbo
 RUN npx turbo run build --filter=web

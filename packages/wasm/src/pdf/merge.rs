@@ -6,11 +6,11 @@ use std::io::Cursor;
 #[wasm_bindgen]
 pub fn merge_pdfs(files: Vec<js_sys::Uint8Array>) -> Result<Vec<u8>, JsValue> {
     let mut merged_doc = Document::with_version("1.5");
-    let mut page_count = 0;
+    let page_count = 0;
     let mut documents = Vec::new();
 
     // First pass: load all documents
-    for file in files {
+    for file in &files {
         let bytes = file.to_vec();
         let doc = Document::load_from(Cursor::new(&bytes))
             .map_err(|e| wasm_error(&format!("Failed to load PDF: {}", e)))?;
@@ -18,23 +18,23 @@ pub fn merge_pdfs(files: Vec<js_sys::Uint8Array>) -> Result<Vec<u8>, JsValue> {
     }
 
     // Second pass: merge pages
-    for (i, mut doc) in documents.into_iter().enumerate() {
+    for (_i, mut doc) in documents.into_iter().enumerate() {
         doc.renumber_objects_with(page_count + 1);
         
-        for (page_num, object_id) in doc.get_pages() {
+        for (_page_num, object_id) in doc.get_pages() {
             let page_content = doc.get_object(object_id)
                 .map_err(|e| wasm_error(&format!("Failed to get page content: {}", e)))?
                 .to_owned();
             
-            merged_doc.add_object(object_id, page_content);
+            merged_doc.objects.insert(object_id, page_content);
             
             // Add page to catalog
-            let pages_id = merged_doc.catalog()
-                .map_err(|e| wasm_error("Failed to get catalog"))?
+            let _pages_id = merged_doc.catalog()
+                .map_err(|_e| wasm_error("Failed to get catalog"))?
                 .get(b"Pages")
-                .map_err(|e| wasm_error("Failed to get Pages"))?
+                .map_err(|_e| wasm_error("Failed to get Pages"))?
                 .as_reference()
-                .map_err(|e| wasm_error("Pages is not a reference"))?;
+                .map_err(|_e| wasm_error("Pages is not a reference"))?;
                 
             // This is a simplified merge logic. Real-world merging with lopdf is more complex
             // and requires handling object renumbering and resource merging carefully.
