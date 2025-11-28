@@ -1,0 +1,20 @@
+{
+  "name": "flux-wasm",
+  "type": "module",
+  "collaborators": [
+    "FluxConvert Team"
+  ],
+  "description": "High-performance WASM modules for FluxConvert",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "flux_wasm_bg.wasm",
+    "flux_wasm.js",
+    "flux_wasm.d.ts"
+  ],
+  "main": "flux_wasm.js",
+  "types": "flux_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

@@ -4,6 +4,9 @@
     "description": "WASM modules for FluxConvert",
     "main": "pkg/flux_wasm.js",
     "types": "pkg/flux_wasm.d.ts",
+    "exports": {
+        ".": "./pkg/flux_wasm.js"
+    },
     "type": "module",
     "files": [
         "pkg"
