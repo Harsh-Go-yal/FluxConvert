@@ -3,11 +3,17 @@
     "tasks": {
         "build": {
             "dependsOn": [
-                "^build"
+                "^build",
+                "wasm:build"
             ],
             "outputs": [
                 ".next/**",
                 "dist/**"
+            ]
+        },
+        "wasm:build": {
+            "outputs": [
+                "packages/wasm/pkg/**"
             ]
         },
         "lint": {},

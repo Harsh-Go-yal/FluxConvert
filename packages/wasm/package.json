@@ -1,0 +1,23 @@
+{
+    "name": "@flux/wasm",
+    "version": "1.0.0",
+    "description": "WASM modules for FluxConvert",
+    "main": "pkg/flux_wasm.js",
+    "types": "pkg/flux_wasm.d.ts",
+    "type": "module",
+    "files": [
+        "pkg"
+    ],
+    "scripts": {
+        "build": "./build.sh",
+        "test": "cargo test"
+    },
+    "keywords": [
+        "wasm",
+        "rust",
+        "pdf",
+        "image"
+    ],
+    "author": "FluxConvert Team",
+    "license": "MIT"
+}
