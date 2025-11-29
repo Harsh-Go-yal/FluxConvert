@@ -6,12 +6,13 @@ const nextConfig: NextConfig = {
 
   experimental: {
     serverActions: { bodySizeLimit: "50mb" },
-    // @ts-ignore
-    middlewareClientMaxBodySize: "50mb",
+    // replaced deprecated field:
+    proxyClientMaxBodySize: "50mb",
   },
 
   async rewrites() {
-    const API = process.env.NEXT_PUBLIC_API_URL;
+    const API =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
     return [
       {
