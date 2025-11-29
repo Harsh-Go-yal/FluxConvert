@@ -1,23 +1,34 @@
+# 1. Builder stage
 FROM node:20-alpine AS builder
 WORKDIR /app
-# Copy the entire monorepo
-COPY . .
-# Install dependencies for the whole monorepo
-RUN apk add --no-cache dos2unix
-RUN dos2unix packages/wasm/build.sh && chmod +x packages/wasm/build.sh
+
+# Copy only what we need
+COPY package.json package-lock.json turbo.json ./
+COPY apps/api/package.json apps/api/package-lock.json ./apps/api/
+
+# Install deps at root (Turbo monorepo)
 RUN npm install
-# Build the api app using turbo
+
+# Copy rest of monorepo
+COPY . .
+
+# Build only API
 RUN npx turbo run build --filter=api
 
+# 2. Runner stage
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy node_modules and built assets
-COPY --from=builder /app/node_modules ./node_modules
+# Railway will inject env automatically — DO NOT hardcode
+# No ENV PDF_SERVICE_URL=... here
+
+# Copy API compiled output
 COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-EXPOSE 8080
+# Expose port consistent with NestJS
+EXPOSE 3000
 
 CMD ["node", "dist/main.js"]
