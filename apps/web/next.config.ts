@@ -5,27 +5,26 @@ const nextConfig: NextConfig = {
   output: "standalone",
 
   experimental: {
-    serverActions: {
-      bodySizeLimit: "50mb",
-    },
+    serverActions: { bodySizeLimit: "50mb" },
     // @ts-ignore
     middlewareClientMaxBodySize: "50mb",
   },
 
   async rewrites() {
+    const API = process.env.NEXT_PUBLIC_API_URL;
+
     return [
       {
         source: "/convert/:path*",
-        destination: `${process.env.API_URL || "http://api:4000"}/convert/:path*`,
+        destination: `${API}/convert/:path*`,
       },
       {
         source: "/pdf/:path*",
-        destination: `${process.env.API_URL || "http://api:4000"}/pdf/:path*`,
+        destination: `${API}/pdf/:path*`,
       },
     ];
   },
 
-  // Recommended for large files (PDF, WASM)
   compress: false,
 };
 
