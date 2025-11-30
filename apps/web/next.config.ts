@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@flux/ui", "@flux/utils", "@flux/wasm"],
+  transpilePackages: ["@flux/ui", "@flux/utils", "@pdf-solutions/wasm"],
   output: "standalone",
 
   experimental: {
@@ -27,6 +27,14 @@ const nextConfig: NextConfig = {
   },
 
   compress: false,
+
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "asset/resource",
+    });
+    return config;
+  },
 };
 
 export default nextConfig;

@@ -16,12 +16,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     if (!tool) {
         return {
-            title: "Tool Not Found - FluxConvert",
+            title: "Tool Not Found - PDF Solutions",
         };
     }
 
     return {
-        title: `${tool.title} - FluxConvert`,
+        title: `${tool.title} - PDF Solutions`,
         description: tool.description,
     };
 }
@@ -88,7 +88,7 @@ export default async function ToolPage({ params }: Props) {
                         <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
                             <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">2</div>
                             <h3 className="text-lg font-semibold mb-2">Process</h3>
-                            <p className="text-muted-foreground">FluxConvert will automatically process your files with our advanced engine.</p>
+                            <p className="text-muted-foreground">PDF Solutions will automatically process your files with our advanced engine.</p>
                         </div>
                         <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
                             <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">3</div>
@@ -122,7 +122,7 @@ export default async function ToolPage({ params }: Props) {
                                 <span className="text-purple-500">✓</span> Free & Easy
                             </h3>
                             <p className="text-muted-foreground">
-                                FluxConvert is 100% free to use. No registration required, no hidden fees, just simple file tools.
+                                PDF Solutions is 100% free to use. No registration required, no hidden fees, just simple file tools.
                             </p>
                         </div>
                         <div className="space-y-4">

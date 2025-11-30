@@ -8,7 +8,7 @@ export function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     <div className="space-y-4">
                         <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
-                            FluxConvert
+                            PDF Solutions
                         </h3>
                         <p className="text-sm text-muted-foreground">
                             Professional file conversion tools for everyone. Fast, secure, and free.
@@ -47,7 +47,7 @@ export function Footer() {
                 </div>
 
                 <div className="mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
-                    <p>&copy; {new Date().getFullYear()} FluxConvert. All rights reserved.</p>
+                    <p>&copy; {new Date().getFullYear()} PDF Solutions. All rights reserved.</p>
                 </div>
             </div>
         </footer>

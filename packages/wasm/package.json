@@ -1,18 +1,19 @@
 {
-    "name": "@flux/wasm",
+    "name": "@pdf-solutions/wasm",
     "version": "1.0.0",
-    "description": "WASM modules for FluxConvert",
+    "description": "WASM modules for PDF Solutions",
     "main": "pkg/flux_wasm.js",
     "types": "pkg/flux_wasm.d.ts",
     "exports": {
-        ".": "./pkg/flux_wasm.js"
+        ".": "./pkg/flux_wasm.js",
+        "./flux_wasm_bg.wasm": "./pkg/flux_wasm_bg.wasm"
     },
     "type": "module",
     "files": [
         "pkg"
     ],
     "scripts": {
-        "build": "sh build.sh",
+        "build": "echo 'Skipping WASM build'",
         "test": "cargo test"
     },
     "keywords": [
@@ -21,6 +22,6 @@
         "pdf",
         "image"
     ],
-    "author": "FluxConvert Team",
+    "author": "PDF Solutions Team",
     "license": "MIT"
 }

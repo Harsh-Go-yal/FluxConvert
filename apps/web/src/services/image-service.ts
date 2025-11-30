@@ -1,3 +1,5 @@
+import imageCompression from 'browser-image-compression';
+
 export class ImageService {
     private static worker: Worker | null = null;
     private static messageId = 0;
@@ -30,7 +32,7 @@ export class ImageService {
         const id = this.messageId++;
         return new Promise((resolve, reject) => {
             this.pending.set(id, { resolve, reject });
-            worker.postMessage({ id, type, payload }, transfer);
+            worker.postMessage({ id, action: type, payload }, transfer);
         });
     }
 
@@ -94,5 +96,70 @@ export class ImageService {
         if (setStatusMessage) setStatusMessage("Processing OCR in worker...");
         const fileBuffer = await file.arrayBuffer();
         return this.send('ocr', { fileBuffer }, [fileBuffer]);
+    }
+
+    static async compress(file: File, options: {
+        mode: "percentage" | "target";
+        percentage: number;
+        targetSize: number;
+        targetUnit: "KB" | "MB";
+    }): Promise<Blob> {
+        let maxSizeMB = 1; // Default
+        let maxWidthOrHeight = 1920; // Default
+        let useWebWorker = true;
+
+        if (options.mode === "percentage") {
+            // Approximate size based on percentage
+            // This is tricky because percentage usually refers to quality or dimension reduction
+            // browser-image-compression uses maxSizeMB and maxWidthOrHeight
+            // We'll use quality reduction if possible, or just reduce dimensions/size
+
+            // For percentage, we can try to map it to a quality score or just reduce the size
+            // Since the library focuses on maxSizeMB, let's calculate a target size based on percentage of original
+            const originalSizeMB = file.size / 1024 / 1024;
+            maxSizeMB = originalSizeMB * (options.percentage / 100);
+        } else {
+            // Target size
+            let targetMB = options.targetSize;
+            if (options.targetUnit === "KB") {
+                targetMB = targetMB / 1024;
+            }
+            maxSizeMB = targetMB;
+        }
+
+        // Ensure maxSizeMB is at least something small
+        if (maxSizeMB < 0.01) maxSizeMB = 0.01;
+
+        console.log(`Compressing to max ${maxSizeMB} MB`);
+
+        try {
+            const compressedFile = await imageCompression(file, {
+                maxSizeMB,
+                maxWidthOrHeight,
+                useWebWorker
+            });
+            return compressedFile;
+        } catch (error) {
+            console.error("Compression failed:", error);
+            throw error;
+        }
+    }
+
+    static async resize(file: File, options: {
+        width: number;
+        height: number;
+        unit: "pixels" | "percentage";
+        maintainAspectRatio: boolean;
+        mode: "stretch" | "crop" | "fit";
+        dpi: number;
+        format: "jpg" | "png" | "webp";
+        quality: number;
+        background: string;
+    }): Promise<Blob> {
+        const fileBuffer = await file.arrayBuffer();
+        return this.send('resize', {
+            fileBuffer,
+            ...options
+        }, [fileBuffer]);
     }
 }

@@ -1,18 +1,18 @@
 export type PdfAction =
-    | 'MERGE'
-    | 'SPLIT'
-    | 'REMOVE_PAGES'
-    | 'ROTATE'
-    | 'WATERMARK'
+    | 'merge'
+    | 'split'
+    | 'remove_pages'
+    | 'rotate'
+    | 'watermark'
 
-    | 'COMPRESS'
-    | 'PDF_TO_IMAGES'
-    | 'IMAGE_TO_PDF'
-    | 'GET_THUMBNAILS';
+    | 'compress'
+    | 'pdf_to_images'
+    | 'image_to_pdf'
+    | 'get_thumbnails';
 
 export interface PdfWorkerRequest {
     id: string;
-    type: PdfAction;
+    action: PdfAction;
     payload: any;
 }
 

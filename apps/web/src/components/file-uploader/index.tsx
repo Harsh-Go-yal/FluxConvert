@@ -44,6 +44,43 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
 
+    // Compression State
+    const [compressionMode, setCompressionMode] = useState<"percentage" | "target">("percentage");
+    const [compressionPercentage, setCompressionPercentage] = useState<number>(50);
+    const [targetSize, setTargetSize] = useState<number>(100);
+    const [targetUnit, setTargetUnit] = useState<"KB" | "MB">("KB");
+
+    // Resize State
+    const [resizeWidth, setResizeWidth] = useState<number>(100);
+    const [resizeHeight, setResizeHeight] = useState<number>(100);
+    const [resizeUnit, setResizeUnit] = useState<"pixels" | "percentage">("percentage");
+    const [maintainAspectRatio, setMaintainAspectRatio] = useState<boolean>(true);
+    const [resizeMode, setResizeMode] = useState<"stretch" | "crop" | "fit">("stretch");
+    const [resizeDpi, setResizeDpi] = useState<number>(72);
+    const [resizeFormat, setResizeFormat] = useState<"jpg" | "png" | "webp">("jpg");
+    const [resizeQuality, setResizeQuality] = useState<number>(90);
+    const [resizeBackground, setResizeBackground] = useState<string>("#ffffff");
+    const [originalDimensions, setOriginalDimensions] = useState<{ width: number; height: number } | null>(null);
+
+    // Load image dimensions when file changes
+    useEffect(() => {
+        if (files.length > 0 && action === 'resize-image') {
+            const img = new Image();
+            const objectUrl = URL.createObjectURL(files[0]);
+            img.onload = () => {
+                setOriginalDimensions({ width: img.width, height: img.height });
+                // Only set initial values if they haven't been touched or if it's a new file
+                // For simplicity, let's reset to original on new file load
+                setResizeWidth(img.width);
+                setResizeHeight(img.height);
+                URL.revokeObjectURL(objectUrl);
+            };
+            img.src = objectUrl;
+        } else {
+            setOriginalDimensions(null);
+        }
+    }, [files, action]);
+
     // Generate thumbnails when a PDF is uploaded and action is remove-pages
     useEffect(() => {
         const generateThumbnails = async () => {
@@ -121,7 +158,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Auto-process when files are added if we are on a specific tool page
     useEffect(() => {
         // Don't auto-process for tools that require user input
-        const interactiveTools = ['remove-pages', 'split-pdf', 'protect-pdf', 'watermark-pdf', 'resize', 'compress'];
+        const interactiveTools = ['remove-pages', 'split-pdf', 'protect-pdf', 'watermark-pdf', 'resize-image', 'compress-image'];
 
         if (initialAction && files.length > 0 && !downloadUrl && !isProcessing && action === initialAction && mode) {
             if (!interactiveTools.includes(initialAction)) {
@@ -237,6 +274,31 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 } else if (action === "ocr") {
                     blob = await ImageService.performOCR(files[0], setStatusMessage);
                     ext = 'txt';
+                } else if (action === "compress-image") {
+                    setStatusMessage("Compressing image...");
+                    blob = await ImageService.compress(files[0], {
+                        mode: compressionMode,
+                        percentage: compressionPercentage,
+                        targetSize: targetSize,
+                        targetUnit: targetUnit
+                    });
+                    filename = `${filename}_compressed`;
+                    ext = files[0].name.split('.').pop() || 'jpg';
+                } else if (action === "resize-image") {
+                    setStatusMessage("Resizing image...");
+                    blob = await ImageService.resize(files[0], {
+                        width: resizeWidth,
+                        height: resizeHeight,
+                        unit: resizeUnit,
+                        maintainAspectRatio,
+                        mode: resizeMode,
+                        dpi: resizeDpi,
+                        format: resizeFormat,
+                        quality: resizeQuality,
+                        background: resizeBackground
+                    });
+                    filename = `${filename}_resized`;
+                    ext = resizeFormat;
                 }
                 // --- DOCUMENT ACTIONS ---
                 else if (action === "to-text") {
@@ -456,6 +518,34 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         setPagesToRemove={setPagesToRemove}
                         thumbnails={thumbnails}
                         generatingThumbnails={generatingThumbnails}
+                        compressionMode={compressionMode}
+                        setCompressionMode={setCompressionMode}
+                        compressionPercentage={compressionPercentage}
+                        setCompressionPercentage={setCompressionPercentage}
+                        targetSize={targetSize}
+                        setTargetSize={setTargetSize}
+                        targetUnit={targetUnit}
+                        setTargetUnit={setTargetUnit}
+                        // Resize Props
+                        resizeWidth={resizeWidth}
+                        setResizeWidth={setResizeWidth}
+                        resizeHeight={resizeHeight}
+                        setResizeHeight={setResizeHeight}
+                        resizeUnit={resizeUnit}
+                        setResizeUnit={setResizeUnit}
+                        maintainAspectRatio={maintainAspectRatio}
+                        setMaintainAspectRatio={setMaintainAspectRatio}
+                        resizeMode={resizeMode}
+                        setResizeMode={setResizeMode}
+                        resizeDpi={resizeDpi}
+                        setResizeDpi={setResizeDpi}
+                        resizeFormat={resizeFormat}
+                        setResizeFormat={setResizeFormat}
+                        resizeQuality={resizeQuality}
+                        setResizeQuality={setResizeQuality}
+                        resizeBackground={resizeBackground}
+                        setResizeBackground={setResizeBackground}
+                        originalDimensions={originalDimensions}
                     />
 
                     <ProcessingStatus

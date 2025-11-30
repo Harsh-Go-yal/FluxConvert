@@ -56,7 +56,7 @@ export function Header() {
                                 <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-primary/20 group-hover:ring-primary/40 transition-all" />
                             </div>
                             <div className="flex flex-col">
-                                <span className="font-bold text-lg leading-none tracking-tight">FluxConvert</span>
+                                <span className="font-bold text-lg leading-none tracking-tight">PDF Solutions</span>
                                 <span className="text-[10px] font-medium text-muted-foreground tracking-widest uppercase group-hover:text-primary transition-colors">Pro Tools</span>
                             </div>
                         </Link>

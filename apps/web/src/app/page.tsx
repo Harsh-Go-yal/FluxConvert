@@ -42,7 +42,7 @@ export default function Home() {
 
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 leading-tight bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
             Master Your Files with <br className="hidden md:block" />
-            <span className="text-primary">FluxConvert</span>
+            <span className="text-primary">PDF Solutions</span>
           </h1>
 
           <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">

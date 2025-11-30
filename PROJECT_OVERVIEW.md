@@ -1,7 +1,7 @@
-# FluxConvert - Project Overview
+# PDF Solutions - Project Overview
 
 ## 🚀 Introduction
-FluxConvert is a high-performance, privacy-focused file utility platform that combines the speed of client-side WASM processing with the power of cloud-based AI.
+PDF Solutions is a high-performance, privacy-focused file utility platform that combines the speed of client-side WASM processing with the power of cloud-based AI.
 
 ## ✨ Features
 

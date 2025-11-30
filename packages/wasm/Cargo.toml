@@ -1,9 +1,9 @@
 [package]
-name = "flux-wasm"
+name = "pdf-solutions-wasm"
 version = "0.1.0"
 edition = "2021"
-description = "High-performance WASM modules for FluxConvert"
-authors = ["FluxConvert Team"]
+description = "High-performance WASM modules for PDF Solutions"
+authors = ["PDF Solutions Team"]
 license = "MIT"
 
 [lib]

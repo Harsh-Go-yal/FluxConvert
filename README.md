@@ -1,6 +1,6 @@
-# FluxConvert - Hybrid File Utility Platform
+# PDF Solutions - Hybrid File Utility Platform
 
-FluxConvert is a high-performance file utility platform that uses a hybrid processing model:
+PDF Solutions is a high-performance file utility platform that uses a hybrid processing model:
 - **Layer 1 (WASM)**: Client-side processing for small files (PDF merge/split, Image compression).
 - **Layer 2 (Node.js)**: Backend orchestration for large files and user management.
 - **Layer 3 (Python AI)**: Microservices for advanced AI tasks (OCR, Enhancement, Background Removal).
