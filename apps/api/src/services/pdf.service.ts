@@ -1,39 +1,79 @@
 import { Injectable } from '@nestjs/common';
 import { PdfClient } from '../microservices/pdf.client';
-import { FileDto, ProtectDto, UnlockDto, SplitDto } from '../dto/file.dto';
+import {
+    FileDto,
+    ProtectDto,
+    UnlockDto,
+    SplitDto
+} from '../dto/file.dto';
 
 @Injectable()
 export class PdfService {
     constructor(private readonly pdfClient: PdfClient) { }
 
-    async protect(file: FileDto, dto: ProtectDto) {
-        const result = await this.pdfClient.protect(file.buffer, file.originalname, dto.password);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // PROTECT
+    // ---------------------------------------------------------
+    async protect(file: FileDto, dto: ProtectDto): Promise<Buffer> {
+        return await this.pdfClient.protect(
+            file.buffer,
+            file.originalname,
+            dto.password
+        );
     }
 
-    async unlock(file: FileDto, dto: UnlockDto) {
-        const result = await this.pdfClient.unlock(file.buffer, file.originalname, dto.password);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // UNLOCK
+    // ---------------------------------------------------------
+    async unlock(file: FileDto, dto: UnlockDto): Promise<Buffer> {
+        return await this.pdfClient.unlock(
+            file.buffer,
+            file.originalname,
+            dto.password
+        );
     }
 
-    async split(file: FileDto, dto: SplitDto) {
-        const result = await this.pdfClient.split(file.buffer, file.originalname, dto.start, dto.end);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // SPLIT
+    // ---------------------------------------------------------
+    async split(file: FileDto, dto: SplitDto): Promise<Buffer> {
+        return await this.pdfClient.split(
+            file.buffer,
+            file.originalname,
+            dto.start,
+            dto.end
+        );
     }
 
-    async merge(files: Array<FileDto>) {
-        const filesData = files.map(f => ({ buffer: f.buffer, filename: f.originalname }));
-        const result = await this.pdfClient.merge(filesData);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // MERGE
+    // ---------------------------------------------------------
+    async merge(files: Array<FileDto>): Promise<Buffer> {
+        const fileData = files.map(f => ({
+            buffer: f.buffer,
+            filename: f.originalname
+        }));
+
+        return await this.pdfClient.merge(fileData);
     }
 
-    async compress(file: FileDto) {
-        const result = await this.pdfClient.compress(file.buffer, file.originalname);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // COMPRESS
+    // ---------------------------------------------------------
+    async compress(file: FileDto): Promise<Buffer> {
+        return await this.pdfClient.compress(
+            file.buffer,
+            file.originalname
+        );
     }
 
-    async repair(file: FileDto) {
-        const result = await this.pdfClient.repair(file.buffer, file.originalname);
-        return { success: true, data: result };
+    // ---------------------------------------------------------
+    // REPAIR
+    // ---------------------------------------------------------
+    async repair(file: FileDto): Promise<Buffer> {
+        return await this.pdfClient.repair(
+            file.buffer,
+            file.originalname
+        );
     }
 }

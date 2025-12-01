@@ -72,6 +72,18 @@ export async function watermarkPdfLocal(file: File, text: string): Promise<Blob>
     return new Blob([resultBuffer], { type: 'application/pdf' });
 }
 
+export async function protectPdfLocal(file: File, password: string): Promise<Blob> {
+    const fileBuffer = await file.arrayBuffer();
+    const resultBuffer = await sendToWorker('protect', { fileBuffer, password }) as ArrayBuffer;
+    return new Blob([resultBuffer], { type: 'application/pdf' });
+}
+
+export async function unlockPdfLocal(file: File, password: string): Promise<Blob> {
+    const fileBuffer = await file.arrayBuffer();
+    const resultBuffer = await sendToWorker('unlock', { fileBuffer, password }) as ArrayBuffer;
+    return new Blob([resultBuffer], { type: 'application/pdf' });
+}
+
 
 
 export async function compressPdfLocal(file: File, quality: number = 0.7): Promise<Blob> {

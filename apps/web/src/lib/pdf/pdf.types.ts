@@ -8,7 +8,9 @@ export type PdfAction =
     | 'compress'
     | 'pdf_to_images'
     | 'image_to_pdf'
-    | 'get_thumbnails';
+    | 'get_thumbnails'
+    | 'protect'
+    | 'unlock';
 
 export interface PdfWorkerRequest {
     id: string;

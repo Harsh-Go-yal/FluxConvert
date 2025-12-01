@@ -1,10 +1,23 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import Response, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
 from service.pdf_engine import PdfEngine
 from typing import List, Optional
+
 import io
+import pikepdf
+import PyPDF2
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # or ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/")
 def health_check():
@@ -29,7 +42,14 @@ async def unlock_pdf(file: UploadFile = File(...), password: str = Form(...)):
         content = await file.read()
         unlocked_pdf = PdfEngine.unlock_pdf(content, password)
         return Response(content=unlocked_pdf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=unlocked_{file.filename}"})
+    except ValueError as e:
+        if str(e) == "Incorrect password":
+             raise HTTPException(status_code=403, detail="Incorrect password")
+        raise HTTPException(status_code=400, detail=str(e))
+    except PyPDF2.errors.PdfReadError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid PDF: {str(e)}")
     except Exception as e:
+        print(f"Error unlocking PDF: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/split")

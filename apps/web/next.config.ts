@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
 
   async rewrites() {
     const API =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
     return [
       {

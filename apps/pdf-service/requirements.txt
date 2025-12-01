@@ -1,5 +1,5 @@
 fastapi
 uvicorn
 python-multipart
-pikepdf
+pikepdf==6.2.7
 PyPDF2
