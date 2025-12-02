@@ -1,10 +1,8 @@
 FROM nginx:alpine
 
-ARG ENV=local
+ARG ENV=production
 
-# Copy template into correct folder for envsubst
 COPY nginx.conf.${ENV}.template /etc/nginx/templates/nginx.conf.template
 
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
