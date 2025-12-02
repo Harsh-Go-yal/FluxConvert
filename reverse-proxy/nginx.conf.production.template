@@ -1,5 +1,7 @@
-# ---------- Upstreams for internal Railway networking ----------
+# ---------- DNS Resolver (VERY IMPORTANT) ----------
+resolver 127.0.0.11 ipv6=off;
 
+# ---------- Upstreams for internal Railway networking ----------
 upstream api_upstream {
     server ${API_INTERNAL}:8080;
 }
