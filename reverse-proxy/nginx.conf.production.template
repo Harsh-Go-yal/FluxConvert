@@ -1,0 +1,70 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    include mime.types;
+    default_type application/octet-stream;
+
+    client_max_body_size 200M;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    upstream api_upstream {
+        server ${API_INTERNAL}:80;
+    }
+
+    upstream pdf_upstream {
+        server ${PDF_INTERNAL}:80;
+    }
+
+    upstream ocr_upstream {
+        server ${OCR_INTERNAL}:80;
+    }
+
+    upstream enhance_upstream {
+        server ${ENHANCE_INTERNAL}:80;
+    }
+
+    upstream bg_remove_upstream {
+        server ${BG_REMOVE_INTERNAL}:80;
+    }
+
+    server {
+        listen 80;
+
+        # Frontend
+        location / {
+            proxy_pass https://pdfsolutionss.com;
+        }
+
+        # API Gateway
+        location /api/ {
+            rewrite ^/api/(.*)$ /$1 break;
+            proxy_pass http://api_upstream;
+        }
+
+        location /pdf-service/ {
+            rewrite ^/pdf-service/(.*)$ /$1 break;
+            proxy_pass http://pdf_upstream;
+        }
+
+        location /ocr-service/ {
+            rewrite ^/ocr-service/(.*)$ /$1 break;
+            proxy_pass http://ocr_upstream;
+        }
+
+        location /enhance-service/ {
+            rewrite ^/enhance-service/(.*)$ /$1 break;
+            proxy_pass http://enhance_upstream;
+        }
+
+        location /bg-remove-service/ {
+            rewrite ^/bg-remove-service/(.*)$ /$1 break;
+            proxy_pass http://bg_remove_upstream;
+        }
+    }
+}
