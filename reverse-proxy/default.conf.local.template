@@ -1,0 +1,25 @@
+# ---------- Upstreams for LOCAL Docker Compose ----------
+upstream web_upstream {
+    server web:3000;
+}
+
+upstream api_upstream {
+    server api:4000;
+}
+
+# ---------- Main Server Block ----------
+server {
+    listen 80;
+    server_name localhost;
+
+    # Frontend (Next.js)
+    location / {
+        proxy_pass http://web_upstream;
+    }
+
+    # API Gateway (NestJS)
+    location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://api_upstream;
+    }
+}

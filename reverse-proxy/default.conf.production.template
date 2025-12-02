@@ -1,0 +1,60 @@
+# ---------- Upstreams for internal Railway networking ----------
+upstream api_upstream {
+    server ${API_INTERNAL}:80;
+}
+
+upstream pdf_upstream {
+    server ${PDF_INTERNAL}:80;
+}
+
+upstream ocr_upstream {
+    server ${OCR_INTERNAL}:80;
+}
+
+upstream enhance_upstream {
+    server ${ENHANCE_INTERNAL}:80;
+}
+
+upstream bg_remove_upstream {
+    server ${BG_REMOVE_INTERNAL}:80;
+}
+
+# ---------- Main Server Block ----------
+server {
+    listen 80;
+
+    # Public frontend hosted on Vercel/domain
+    location / {
+        proxy_pass https://pdfsolutionss.com;
+    }
+
+    # API Gateway
+    location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://api_upstream;
+    }
+
+    # PDF Service
+    location /pdf-service/ {
+        rewrite ^/pdf-service/(.*)$ /$1 break;
+        proxy_pass http://pdf_upstream;
+    }
+
+    # OCR Service
+    location /ocr-service/ {
+        rewrite ^/ocr-service/(.*)$ /$1 break;
+        proxy_pass http://ocr_upstream;
+    }
+
+    # Enhance Service
+    location /enhance-service/ {
+        rewrite ^/enhance-service/(.*)$ /$1 break;
+        proxy_pass http://enhance_upstream;
+    }
+
+    # Background Remove Service
+    location /bg-remove-service/ {
+        rewrite ^/bg-remove-service/(.*)$ /$1 break;
+        proxy_pass http://bg_remove_upstream;
+    }
+}
