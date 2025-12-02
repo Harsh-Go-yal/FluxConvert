@@ -20,7 +20,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 # upstream definitions (envsubst will replace the variables with internal hostnames)
 upstream api_upstream {
-    server ${API_INTERNAL}:8080;
+    server ${API_INTERNAL}:4000;
     keepalive 16;
 }
 
