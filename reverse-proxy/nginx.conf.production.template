@@ -1,57 +1,93 @@
-# ---------- Upstreams for internal Railway networking ----------
+# nginx.conf.template (for /etc/nginx/conf.d/nginx.conf via envsubst)
+# NOTE: This file is included INSIDE nginx's http {} block (do NOT add events or http wrappers)
+
+# resolver for Docker / Railway internal DNS
+resolver 127.0.0.11 ipv6=off;
+
+# client / proxy limits
+client_max_body_size 200M;
+proxy_connect_timeout 60s;
+proxy_send_timeout 300s;
+proxy_read_timeout 300s;
+proxy_http_version 1.1;
+proxy_set_header Connection "";
+
+# common proxy headers
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+
+# upstream definitions (envsubst will replace the variables with internal hostnames)
 upstream api_upstream {
     server ${API_INTERNAL}:8080;
+    keepalive 16;
 }
 
 upstream pdf_upstream {
     server ${PDF_INTERNAL}:8004;
+    keepalive 8;
 }
 
 upstream ocr_upstream {
     server ${OCR_INTERNAL}:8001;
+    keepalive 8;
 }
 
 upstream enhance_upstream {
     server ${ENHANCE_INTERNAL}:8003;
+    keepalive 8;
 }
 
 upstream bg_remove_upstream {
     server ${BG_REMOVE_INTERNAL}:8002;
+    keepalive 8;
 }
 
-# ---------- Main Server Block ----------
+# single server listening on port 80
 server {
     listen 80;
+    server_name _;
 
-    # Health check / root
-    location / {
-        return 200 "Reverse Proxy OK";
+    # Serve public site on root (frontend is hosted on Vercel)
+    location = / {
+        proxy_pass https://pdfsolutionss.com;
+        proxy_set_header Host $host;
     }
 
-    # API Gateway
+    # API Gateway (strip /api prefix)
     location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
         proxy_pass http://api_upstream;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
     }
 
     # PDF Service
     location /pdf-service/ {
+        rewrite ^/pdf-service/(.*)$ /$1 break;
         proxy_pass http://pdf_upstream;
     }
 
     # OCR Service
     location /ocr-service/ {
+        rewrite ^/ocr-service/(.*)$ /$1 break;
         proxy_pass http://ocr_upstream;
     }
 
     # Enhance Service
     location /enhance-service/ {
+        rewrite ^/enhance-service/(.*)$ /$1 break;
         proxy_pass http://enhance_upstream;
     }
 
     # Background Remove Service
     location /bg-remove-service/ {
+        rewrite ^/bg-remove-service/(.*)$ /$1 break;
         proxy_pass http://bg_remove_upstream;
+    }
+
+    # Optional basic health check endpoint on proxy that returns upstream health via a simple pass-through
+    location /__proxy_health__ {
+        return 200 '{"status":"ok","proxy":"nginx"}';
+        add_header Content-Type application/json;
     }
 }
