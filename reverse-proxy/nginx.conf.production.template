@@ -1,22 +1,23 @@
 # ---------- Upstreams for internal Railway networking ----------
+
 upstream api_upstream {
-    server ${API_INTERNAL}:80;
+    server ${API_INTERNAL}:8080;
 }
 
 upstream pdf_upstream {
-    server ${PDF_INTERNAL}:80;
+    server ${PDF_INTERNAL}:8004;
 }
 
 upstream ocr_upstream {
-    server ${OCR_INTERNAL}:80;
+    server ${OCR_INTERNAL}:8001;
 }
 
 upstream enhance_upstream {
-    server ${ENHANCE_INTERNAL}:80;
+    server ${ENHANCE_INTERNAL}:8003;
 }
 
 upstream bg_remove_upstream {
-    server ${BG_REMOVE_INTERNAL}:80;
+    server ${BG_REMOVE_INTERNAL}:8002;
 }
 
 # ---------- Main Server Block ----------
