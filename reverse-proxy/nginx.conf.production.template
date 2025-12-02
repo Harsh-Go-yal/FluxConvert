@@ -1,48 +1,57 @@
-worker_processes 1;
-
-events {
-    worker_connections 1024;
+# ---------- Upstreams for internal Railway networking ----------
+upstream api_upstream {
+    server ${API_INTERNAL}:8080;
 }
 
-http {
+upstream pdf_upstream {
+    server ${PDF_INTERNAL}:8004;
+}
 
-    # ---------- Upstreams ----------
-    upstream api_upstream { server ${API_INTERNAL}:8080; }
-    upstream pdf_upstream { server ${PDF_INTERNAL}:8004; }
-    upstream ocr_upstream { server ${OCR_INTERNAL}:8001; }
-    upstream enhance_upstream { server ${ENHANCE_INTERNAL}:8003; }
-    upstream bg_remove_upstream { server ${BG_REMOVE_INTERNAL}:8002; }
+upstream ocr_upstream {
+    server ${OCR_INTERNAL}:8001;
+}
 
-    server {
-        listen 80;
+upstream enhance_upstream {
+    server ${ENHANCE_INTERNAL}:8003;
+}
 
-        # ---------- Root ----------
-        location / {
-            return 200 "OK";
-        }
+upstream bg_remove_upstream {
+    server ${BG_REMOVE_INTERNAL}:8002;
+}
 
-        # ---------- API ----------
-        location /api/ {
-            proxy_pass http://api_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-        }
+# ---------- Main Server Block ----------
+server {
+    listen 80;
 
-        # ---------- PDF ----------
-        location /pdf-service/ {
-            proxy_pass http://pdf_upstream;
-        }
+    # Health check / root
+    location / {
+        return 200 "Reverse Proxy OK";
+    }
 
-        location /ocr-service/ {
-            proxy_pass http://ocr_upstream;
-        }
+    # API Gateway
+    location /api/ {
+        proxy_pass http://api_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 
-        location /enhance-service/ {
-            proxy_pass http://enhance_upstream;
-        }
+    # PDF Service
+    location /pdf-service/ {
+        proxy_pass http://pdf_upstream;
+    }
 
-        location /bg-remove-service/ {
-            proxy_pass http://bg_remove_upstream;
-        }
+    # OCR Service
+    location /ocr-service/ {
+        proxy_pass http://ocr_upstream;
+    }
+
+    # Enhance Service
+    location /enhance-service/ {
+        proxy_pass http://enhance_upstream;
+    }
+
+    # Background Remove Service
+    location /bg-remove-service/ {
+        proxy_pass http://bg_remove_upstream;
     }
 }
