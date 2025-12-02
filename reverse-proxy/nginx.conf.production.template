@@ -1,12 +1,10 @@
 # nginx.conf.production.template
-# NOTE: This is a template. Railway's entrypoint will run envsubst on it,
-# so placeholders like ${API_INTERNAL} must be supplied as ENV vars.
+# Railway will inject this into /etc/nginx/conf.d/nginx.conf inside the existing http{} context.
 
-# DNS resolver for Docker internal DNS
+# ---------- DNS Resolver ----------
 resolver 127.0.0.11 ipv6=off;
 
-# ---------- Upstreams for internal Railway networking ----------
-# Each upstream points to the service hostname (ENV) + port (your docker EXPOSE)
+# ---------- Upstreams ----------
 upstream api_upstream {
     server ${API_INTERNAL}:4000;
 }
@@ -27,122 +25,72 @@ upstream bg_remove_upstream {
     server ${BG_REMOVE_INTERNAL}:8002;
 }
 
-# ---------- http block ----------
-http {
-    include       mime.types;
-    default_type  application/octet-stream;
+# ---------- MAIN SERVER ----------
+server {
+    listen 80;
 
-    sendfile        on;
-    tcp_nopush      on;
-    tcp_nodelay     on;
-    keepalive_timeout  65;
-    client_max_body_size 200M;   # accept big uploads
+    # Frontend
+    location / {
+        proxy_pass https://pdfsolutionss.com;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-    # ---------- Main Server Block ----------
-    server {
-        listen 80;
+    # API
+    location ^~ /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        proxy_pass http://api_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # Root: forward to your public frontend (Vercel)
-        # If you want the proxy to host static assets itself, change this.
-        location / {
-            proxy_pass https://pdfsolutionss.com;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 120s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 120s;
-            proxy_buffering off;
-        }
+    # PDF
+    location ^~ /pdf-service/ {
+        rewrite ^/pdf-service/(.*)$ /$1 break;
+        proxy_pass http://pdf_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # API Gateway (forward /api/* to API service)
-        location ^~ /api/ {
-            # remove /api/ prefix before passing to upstream (api expects /)
-            rewrite ^/api/(.*)$ /$1 break;
-            proxy_pass http://api_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 120s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 120s;
-            proxy_buffering off;
-        }
+    # OCR
+    location ^~ /ocr-service/ {
+        rewrite ^/ocr-service/(.*)$ /$1 break;
+        proxy_pass http://ocr_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # PDF Service
-        location ^~ /pdf-service/ {
-            rewrite ^/pdf-service/(.*)$ /$1 break;
-            proxy_pass http://pdf_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 180s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 180s;
-            proxy_buffering off;
-        }
+    # Enhance
+    location ^~ /enhance-service/ {
+        rewrite ^/enhance-service/(.*)$ /$1 break;
+        proxy_pass http://enhance_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # OCR Service
-        location ^~ /ocr-service/ {
-            rewrite ^/ocr-service/(.*)$ /$1 break;
-            proxy_pass http://ocr_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 180s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 180s;
-            proxy_buffering off;
-        }
+    # Background Remove
+    location ^~ /bg-remove-service/ {
+        rewrite ^/bg-remove-service/(.*)$ /$1 break;
+        proxy_pass http://bg_remove_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # Enhance Service
-        location ^~ /enhance-service/ {
-            rewrite ^/enhance-service/(.*)$ /$1 break;
-            proxy_pass http://enhance_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 180s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 180s;
-            proxy_buffering off;
-        }
-
-        # Background remove service
-        location ^~ /bg-remove-service/ {
-            rewrite ^/bg-remove-service/(.*)$ /$1 break;
-            proxy_pass http://bg_remove_upstream;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-            proxy_read_timeout 180s;
-            proxy_connect_timeout 10s;
-            proxy_send_timeout 180s;
-            proxy_buffering off;
-        }
-
-        # Optional: simple health endpoint on the proxy itself
-        location = /_reverse_proxy_health {
-            return 200 '{"status":"ok","service":"reverse-proxy"}';
-            add_header Content-Type application/json;
-        }
-    } # server end
-} # http end
+    # Health check
+    location = /_reverse_proxy_health {
+        return 200 '{"status":"ok"}';
+        add_header Content-Type application/json;
+    }
+}
