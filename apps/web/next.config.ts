@@ -6,22 +6,38 @@ const nextConfig: NextConfig = {
 
   experimental: {
     serverActions: { bodySizeLimit: "50mb" },
-    // replaced deprecated field:
     proxyClientMaxBodySize: "50mb",
   },
 
   async rewrites() {
-    const API =
-      process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    /**
+     * API URL priority:
+     * 1. NEXT_PUBLIC_API_URL (browser + server)
+     * 2. API_URL (server only)
+     * 3. Local fallback for dev
+     */
+    const API_BASE =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.API_URL ||
+      "http://localhost:4000/api";
 
     return [
+      // Convert service
       {
         source: "/convert/:path*",
-        destination: `${API}/convert/:path*`,
+        destination: `${API_BASE}/convert/:path*`,
       },
+
+      // PDF service
       {
         source: "/pdf/:path*",
-        destination: `${API}/pdf/:path*`,
+        destination: `${API_BASE}/pdf/:path*`,
+      },
+
+      // Direct API passthrough
+      {
+        source: "/api/:path*",
+        destination: `${API_BASE}/:path*`,
       },
     ];
   },
