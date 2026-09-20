@@ -26,25 +26,8 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
 
-      # ── Step 2: Prevent infinite loop ───────────────────────────────────────
-      - name: Check if last commit was from AI bot
-        id: check-bot
-        run: |
-          LAST_AUTHOR=$(git log -1 --pretty=format:'%an')
-          LAST_MSG=$(git log -1 --pretty=format:'%s')
-          echo "Last commit author: $LAST_AUTHOR"
-          echo "Last commit message: $LAST_MSG"
-          if [[ "$LAST_AUTHOR" == "FluxConvert AI Bot" ]] || echo "$LAST_MSG" | grep -q "\[AI-update\]"; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "⚠️ Last commit was from AI bot — skipping to prevent infinite loop"
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-            echo "✅ Proceeding with AI update cycle"
-          fi
-
-      # ── Step 3: Setup Node ──────────────────────────────────────────────────
+      # ── Step 2: Setup Node ──────────────────────────────────────────────────
       - name: Setup Node.js 22
-        if: steps.check-bot.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
@@ -53,15 +36,13 @@ jobs:
             package-lock.json
             apps/web/package-lock.json
 
-      # ── Step 4: Install deps ─────────────────────────────────────────────────
+      # ── Step 3: Install deps ─────────────────────────────────────────────────
       - name: Install dependencies
-        if: steps.check-bot.outputs.skip != 'true'
         working-directory: apps/web
         run: npm install
 
-      # ── Step 5: Collect TypeScript errors ───────────────────────────────────
+      # ── Step 4: Collect TypeScript errors ───────────────────────────────────
       - name: Collect TypeScript errors
-        if: steps.check-bot.outputs.skip != 'true'
         working-directory: apps/web
         run: |
           echo "🔍 Running TypeScript check..."
@@ -69,9 +50,8 @@ jobs:
           echo "--- TSC errors captured ---"
           cat /tmp/tsc-errors.txt
 
-      # ── Step 6: Collect build errors ────────────────────────────────────────
+      # ── Step 5: Collect build errors ────────────────────────────────────────
       - name: Collect build errors (pre-AI)
-        if: steps.check-bot.outputs.skip != 'true'
         working-directory: apps/web
         continue-on-error: true
         run: |
@@ -82,18 +62,16 @@ jobs:
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
-      # ── Step 7: Run AI Agent ─────────────────────────────────────────────────
-      - name: 🤖 Run DeepSeek AI Agent
-        if: steps.check-bot.outputs.skip != 'true'
+      # ── Step 6: Run AI Agent ─────────────────────────────────────────────────
+      - name: 🤖 Run DeepSeek AI Agent (30-min coding loop)
         working-directory: apps/web
         run: node scripts/ai-agent.js
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
-      # ── Step 8: Verify build passes after AI changes ─────────────────────────
+      # ── Step 7: Verify build passes after AI changes ─────────────────────────
       - name: Verify build after AI changes
-        if: steps.check-bot.outputs.skip != 'true'
         id: verify-build
         working-directory: apps/web
         continue-on-error: true
@@ -103,9 +81,9 @@ jobs:
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
 
-      # ── Step 9: Commit & push (only if build passed) ─────────────────────────
+      # ── Step 8: Commit & push (only if build passed) ─────────────────────────
       - name: Commit and push AI changes
-        if: steps.check-bot.outputs.skip != 'true' && steps.verify-build.outcome == 'success'
+        if: steps.verify-build.outcome == 'success'
         run: |
           git config user.name "FluxConvert AI Bot"
           git config user.email "ai-bot@fluxconvert.dev"
@@ -128,16 +106,16 @@ jobs:
             echo "✅ Changes pushed to main — Vercel will deploy automatically!"
           fi
 
-      # ── Step 10: Log skipped build ───────────────────────────────────────────
+      # ── Step 9: Log skipped build ───────────────────────────────────────────
       - name: Log build failure (changes NOT pushed)
-        if: steps.check-bot.outputs.skip != 'true' && steps.verify-build.outcome == 'failure'
+        if: steps.verify-build.outcome == 'failure'
         run: |
           echo "⚠️ AI-generated code failed the build check — changes were NOT pushed to main"
           echo "The site is safe. Changes will be retried next cycle with a corrected prompt."
 
-      # ── Step 11: Write Job Summary (always runs) ─────────────────────────────
+      # ── Step 10: Write Job Summary (always runs) ─────────────────────────────
       - name: Write job summary
-        if: steps.check-bot.outputs.skip != 'true' && always()
+        if: always()
         run: |
           REPORT_FILE="apps/web/scripts/ai-report.json"
           BUILD_OUTCOME="${{ steps.verify-build.outcome }}"
@@ -200,9 +178,3 @@ jobs:
             echo "# 🤖 AI Auto-Update" >> $GITHUB_STEP_SUMMARY
             echo "No report file found this cycle." >> $GITHUB_STEP_SUMMARY
           fi
-
-      - name: Skipped (bot commit)
-        if: steps.check-bot.outputs.skip == 'true'
-        run: |
-          echo "# 🤖 AI Auto-Update — Skipped" >> $GITHUB_STEP_SUMMARY
-          echo "Last commit was from the AI bot. Skipping this cycle to prevent a loop." >> $GITHUB_STEP_SUMMARY

@@ -3,7 +3,10 @@ services:
   # 1. Reverse Proxy (NGINX)
   #########################################
   reverse-proxy:
-    build: ./reverse-proxy
+    build:
+      context: ./reverse-proxy
+      args:
+        ENV: local
     ports:
       - "80:80"
     depends_on:
