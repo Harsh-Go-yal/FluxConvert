@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import type { Configuration as WebpackConfig } from "webpack";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -33,7 +32,7 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  webpack: (config: WebpackConfig) => {
+  webpack: (config: any) => {
     config.module?.rules?.push({
       test: /\.wasm$/,
       type: "asset/resource",

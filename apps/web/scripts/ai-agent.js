@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * FluxConvert AI Agent — Multi-Round Coder
+ * FluxConvert AI Agent — Multi-Round Autonomous Coder
  * ─────────────────────────────────────────────────────────────────────────────
- * Runs a continuous loop for 30 minutes, calling DeepSeek AI in multiple
- * rounds. Each round:
- *   1. Re-scans the current state of the codebase (TypeScript errors)
- *   2. Calls DeepSeek with the updated context + history of previous rounds
- *   3. Applies patches to disk
- *   4. Runs a quick tsc verify
- *   5. Repeats until 30 minutes elapsed or nothing left to fix
- *
- * The GitHub Actions workflow then runs a final build check before pushing.
+ * Runs a continuous loop for up to 30 minutes, calling DeepSeek AI in
+ * successive rounds. Each round:
+ *   1. Scans current TypeScript errors & source files
+ *   2. Provides DeepSeek with full live context + results of previous rounds
+ *   3. Applies validated changes safely within apps/web
+ *   4. Runs an incremental tsc check
+ *   5. Advances or finishes when the codebase is optimal
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -32,12 +30,13 @@ const DEEPSEEK_API_URL  = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_MODEL    = 'deepseek-chat';
 
 const CODING_DURATION_MS = 28 * 60 * 1000; // 28 min coding, 2 min buffer for final build
-const MAX_ROUNDS         = 15;              // Safety cap on API calls
-const MAX_FILE_CHARS     = 5000;            // Truncate large files per round
+const MAX_ROUNDS         = 12;              // Cap on total rounds per session
+const MAX_FILE_CHARS     = 6000;            // Max characters per context file
 const START_TIME         = Date.now();
 
 // Files to read as context each round (relative to apps/web)
 const CONTEXT_FILES = [
+  'next.config.ts',
   'src/config/tools.ts',
   'src/app/page.tsx',
   'src/app/[tool]/page.tsx',
@@ -49,46 +48,44 @@ const CONTEXT_FILES = [
 ];
 
 // ── System Prompt ──────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an expert Next.js 14 developer working autonomously on "FluxConvert" — a file utility platform with PDF tools, image tools, and conversion features.
+const SYSTEM_PROMPT = `You are an expert Next.js 14 / TypeScript developer autonomously improving "FluxConvert" — a modern file conversion and PDF utility web app.
 
 Tech stack:
-- Next.js 14 (App Router), TypeScript, TailwindCSS
+- Next.js 14/15 (App Router), TypeScript, TailwindCSS
 - ShadCN UI components (in src/components/ui/)
-- Framer Motion for animations
-- pdf-lib (WASM) for client-side PDF processing
-- Clerk for authentication (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is available as env var)
+- Framer Motion for sleek animations
+- pdf-lib & WASM for client-side PDF processing
+- Lucide React for modern icons
 
-You are running in ROUND-BASED mode. Each round you will be shown:
-- Current TypeScript errors
-- The current state of source files
-- A history of what previous rounds already fixed
+You are running in an iterative MULTI-ROUND mode. Each round you are given:
+- Live TypeScript errors (if any)
+- Current source files
+- Complete history of previous rounds (what worked, what failed or was skipped)
 
-Your job each round is to find and fix the NEXT set of issues that weren't fixed yet.
+GOALS:
+1. 🔴 FIX TypeScript errors immediately (highest priority)
+2. 🟠 FIX any broken tool logic or missing parameters
+3. 🟡 ENHANCE UX: Add smooth micro-animations, loading states, tooltips, responsive layout polish
+4. 🟢 EXPAND FEATURES: Add or refine tools in src/config/tools.ts and src/app/
+5. 🔵 CLEAN CODE: Ensure strict TypeScript types and clean architecture
 
-PRIORITY ORDER:
-1. 🔴 Fix TypeScript compilation errors (highest priority)
-2. 🟠 Fix broken or incomplete tool functionality
-3. 🟡 Fix broken imports or missing component references
-4. 🟢 Improve UI/UX — better animations, polish, responsiveness
-5. 🔵 Add small but impactful new features from the roadmap
+RULES:
+- Return ONLY a valid JSON object matching the schema below. No markdown fences around the JSON.
+- Every "content" in "changes" must be the FULL and COMPLETE new file content (never a diff).
+- File paths are relative to apps/web (e.g. "src/app/page.tsx", "next.config.ts").
+- NEVER delete working features.
+- If there are no errors and you have no further improvements to make, return "changes": [].
 
-STRICT RULES:
-- Return ONLY a valid JSON object. No markdown. No code blocks around JSON.
-- Each "content" in "changes" must be the COMPLETE new file content (not a diff)
-- Only include files you are ACTUALLY modifying this round
-- The code must be valid TypeScript/TSX that compiles
-- NEVER remove working features
-- File paths are relative to apps/web (e.g. "src/app/page.tsx")
-- If you already fixed something in a previous round, do not repeat it
-- If there is nothing left to improve, return an empty changes array
-
-RETURN THIS EXACT JSON:
+JSON FORMAT:
 {
-  "summary": "One sentence, what you fixed/improved this round, max 100 chars",
-  "bugsFixed": ["bug description"],
-  "newFeatures": ["improvement description"],
+  "summary": "Short 1-sentence description of changes in this round",
+  "bugsFixed": ["Description of bug fixed"],
+  "newFeatures": ["Description of improvement or feature added"],
   "changes": [
-    { "file": "src/app/page.tsx", "content": "// FULL file content" }
+    {
+      "file": "src/components/header.tsx",
+      "content": "// FULL file content here..."
+    }
   ]
 }`;
 
@@ -124,7 +121,7 @@ function runTscCheck() {
       timeout: 60000,
       stdio: 'pipe',
     });
-    return ''; // No errors
+    return ''; // Clean
   } catch (err) {
     const output = (err.stdout || '') + (err.stderr || '');
     return output.substring(0, 3000);
@@ -137,7 +134,7 @@ function readInitialErrors() {
   let result = '';
   try { if (fs.existsSync(tscPath))   result += fs.readFileSync(tscPath, 'utf-8').substring(0, 2000); } catch {}
   try { if (fs.existsSync(buildPath)) result += '\n' + fs.readFileSync(buildPath, 'utf-8').substring(0, 1500); } catch {}
-  return result || '[No initial errors captured from workflow]';
+  return result || '[No initial errors captured]';
 }
 
 // ── Prompt Builder ──────────────────────────────────────────────────────────
@@ -145,22 +142,26 @@ function readInitialErrors() {
 function buildRoundPrompt(round, sourceFiles, tscErrors, roundHistory, initialErrors) {
   const sections = [];
 
-  if (round === 1) {
-    sections.push(`## Initial Build & TypeScript Errors (captured before agent started):\n\`\`\`\n${initialErrors}\n\`\`\``);
+  if (round === 1 && initialErrors && !initialErrors.includes('[No initial errors')) {
+    sections.push(`## Initial Captured Errors:\n\`\`\`\n${initialErrors}\n\`\`\``);
   }
 
-  sections.push(`## Current TypeScript Errors (round ${round} live scan):\n\`\`\`\n${tscErrors || 'None — no TypeScript errors!'}\n\`\`\``);
+  sections.push(`## Current TypeScript Errors (Round ${round} Live Scan):\n\`\`\`\n${tscErrors || '✅ 0 errors — TypeScript is completely clean!'}\n\`\`\``);
 
   if (roundHistory.length > 0) {
-    sections.push(`## What Previous Rounds Already Did:\n${roundHistory.map((h, i) => `Round ${i + 1}: ${h}`).join('\n')}\n\nDo NOT repeat fixes from previous rounds. Focus on what's left.`);
+    sections.push(`## Previous Rounds History:\n${roundHistory.map((h, i) => `Round ${i + 1}: ${h}`).join('\n')}\n\n*Note: Do NOT repeat identical attempts that previously failed or were skipped.*`);
   }
 
-  sections.push(`## Current Source Files (round ${round}):`);
+  sections.push(`## Current Source Files:`);
   for (const [filePath, content] of Object.entries(sourceFiles)) {
     sections.push(`### ${filePath}\n\`\`\`tsx\n${content}\n\`\`\``);
   }
 
-  sections.push(`\n## Instructions for Round ${round}:\nTime elapsed: ${elapsedMin()} minutes. Analyze the current state and fix the next set of issues. Return your JSON response.`);
+  if (tscErrors) {
+    sections.push(`## Instructions for Round ${round}:\n🔴 Fix the TypeScript errors listed above. Return full file contents in JSON.`);
+  } else {
+    sections.push(`## Instructions for Round ${round}:\n🟢 TypeScript is clean! Focus on enhancing UI/UX polish, micro-animations, tool capabilities, or performance in FluxConvert. Return your JSON response.`);
+  }
 
   return sections.join('\n\n');
 }
@@ -198,31 +199,54 @@ async function callDeepSeek(prompt, round) {
   return JSON.parse(raw);
 }
 
-// ── Apply Patches ──────────────────────────────────────────────────────────
+// ── Safe Patch Application ─────────────────────────────────────────────────
+
+function checkPathSafety(targetRelPath) {
+  const normalizedRel = targetRelPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const fullPath = path.resolve(WEB_DIR, normalizedRel);
+  const rel = path.relative(WEB_DIR, fullPath).replace(/\\/g, '/');
+
+  // Must stay within apps/web
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { safe: false, reason: 'outside apps/web directory' };
+  }
+
+  // Guard sensitive paths
+  if (rel.startsWith('.env') || rel.includes('/.env')) {
+    return { safe: false, reason: 'environment files are protected' };
+  }
+  if (rel.startsWith('scripts/')) {
+    return { safe: false, reason: 'agent orchestrator scripts are protected' };
+  }
+  if (rel.startsWith('node_modules/') || rel.startsWith('.git/')) {
+    return { safe: false, reason: 'system directory' };
+  }
+
+  return { safe: true, fullPath, rel };
+}
 
 function applyChanges(aiResponse) {
-  const SAFE_ROOT = path.join(WEB_DIR, 'src');
-  const applied   = [];
-  const skipped   = [];
+  const applied = [];
+  const skipped = [];
 
   for (const change of (aiResponse.changes || [])) {
     const { file, content } = change;
 
     if (!file || !content || content.trim().length < 10) {
-      skipped.push({ file: file || '?', reason: 'empty/missing content' });
+      skipped.push({ file: file || '?', reason: 'empty or invalid content' });
       continue;
     }
 
-    const fullPath = path.resolve(WEB_DIR, file);
-    if (!fullPath.startsWith(SAFE_ROOT)) {
-      skipped.push({ file, reason: 'outside safe directory (security guard)' });
+    const { safe, reason, fullPath, rel } = checkPathSafety(file);
+    if (!safe) {
+      skipped.push({ file, reason });
       continue;
     }
 
     try {
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
       fs.writeFileSync(fullPath, content, 'utf-8');
-      applied.push(file);
+      applied.push(rel);
     } catch (err) {
       skipped.push({ file, reason: err.message });
     }
@@ -241,14 +265,14 @@ function updateChangelog(allRoundsReport) {
     ``,
     `## 🤖 AI Coding Session — ${timestamp}`,
     ``,
-    `**Duration:** ~30 minutes | **Rounds:** ${allRoundsReport.totalRounds}`,
-    `**Total files changed:** ${allRoundsReport.allAppliedFiles.length}`,
-    `**Total bugs fixed:** ${allRoundsReport.allBugsFixed.length}`,
-    `**Total improvements:** ${allRoundsReport.allFeatures.length}`,
+    `**Duration:** ~30 minutes | **Rounds completed:** ${allRoundsReport.totalRounds}`,
+    `**Files modified:** ${allRoundsReport.allAppliedFiles.length}`,
+    `**Bugs fixed:** ${allRoundsReport.allBugsFixed.length}`,
+    `**Improvements made:** ${allRoundsReport.allFeatures.length}`,
   ];
 
   if (allRoundsReport.roundSummaries.length > 0) {
-    lines.push(`\n### Round-by-Round`);
+    lines.push(`\n### Round Summary`);
     allRoundsReport.roundSummaries.forEach((s, i) => lines.push(`- **Round ${i + 1}:** ${s}`));
   }
 
@@ -258,7 +282,7 @@ function updateChangelog(allRoundsReport) {
   }
 
   if (allRoundsReport.allFeatures.length > 0) {
-    lines.push(`\n### Improvements`);
+    lines.push(`\n### Enhancements & Features`);
     allRoundsReport.allFeatures.forEach(f => lines.push(`- ${f}`));
   }
 
@@ -279,7 +303,7 @@ function updateChangelog(allRoundsReport) {
   }
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
+// ── Main Loop ──────────────────────────────────────────────────────────────
 
 async function main() {
   console.log('');
@@ -287,7 +311,7 @@ async function main() {
   console.log('║   🤖 FluxConvert AI Agent — 30-Minute Coding Session    ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log(`📅 Started: ${new Date().toISOString()}`);
-  console.log(`⏱️  Will code for up to 28 minutes across up to ${MAX_ROUNDS} rounds`);
+  console.log(`⏱️  Session window: up to 28 minutes | Max rounds: ${MAX_ROUNDS}`);
   console.log('');
 
   if (!DEEPSEEK_API_KEY) {
@@ -296,19 +320,18 @@ async function main() {
     process.exit(0);
   }
 
-  // ── Accumulator ──────────────────────────────────────────────────────────
-  const allAppliedFiles = [];
-  const allBugsFixed    = [];
-  const allFeatures     = [];
-  const roundSummaries  = [];
-  const initialErrors   = readInitialErrors();
+  const allAppliedFiles   = [];
+  const allBugsFixed      = [];
+  const allFeatures       = [];
+  const roundSummaries    = [];
+  const roundHistory      = [];
+  const initialErrors     = readInitialErrors();
 
-  // ── Multi-Round Loop ──────────────────────────────────────────────────────
+  let consecutiveEmptyRounds = 0;
+
   for (let round = 1; round <= MAX_ROUNDS; round++) {
-
-    // Time check
     if (timeLeft() <= 0) {
-      console.log(`\n⏰ 28-minute coding session complete after ${round - 1} rounds.`);
+      console.log(`\n⏰ Time limit reached (~28 min). Concluding session.`);
       break;
     }
 
@@ -317,74 +340,90 @@ async function main() {
     console.log(`│  🔄 ROUND ${String(round).padEnd(2)}  |  ⏱️  ${elapsedMin()} min elapsed  |  ${Math.round(timeLeft()/1000/60)} min left  │`);
     console.log(`└─────────────────────────────────────────────────────────┘`);
 
-    // Phase A: Scan current state
-    console.log('  📂 Reading source files...');
+    // 1. Scan current state
+    console.log('  📂 Loading source context...');
     const sourceFiles = {};
     for (const file of CONTEXT_FILES) {
       sourceFiles[file] = readSourceFile(file);
     }
 
-    console.log('  🔍 Running tsc --noEmit...');
+    console.log('  🔍 Running TypeScript scan...');
     const tscErrors = runTscCheck();
     if (tscErrors) {
-      console.log(`  🔴 TypeScript errors found (${tscErrors.split('\n').length} lines)`);
+      console.log(`  🔴 TypeScript issues detected (${tscErrors.split('\n').filter(Boolean).length} lines)`);
     } else {
-      console.log('  🟢 No TypeScript errors');
+      console.log('  🟢 TypeScript check passed clean');
     }
 
-    // Phase B: Call DeepSeek
-    console.log('  🧠 Calling DeepSeek AI...');
+    // 2. Call DeepSeek AI
+    console.log('  🧠 Requesting AI analysis & improvements...');
     let aiResponse;
     try {
-      const prompt = buildRoundPrompt(round, sourceFiles, tscErrors, roundSummaries, initialErrors);
+      const prompt = buildRoundPrompt(round, sourceFiles, tscErrors, roundHistory, initialErrors);
       aiResponse   = await callDeepSeek(prompt, round);
     } catch (err) {
-      console.error(`  ❌ DeepSeek API failed in round ${round}: ${err.message}`);
-      console.log('  ⏸️  Waiting 30 seconds before next round...');
-      await new Promise(r => setTimeout(r, 30000));
+      console.error(`  ❌ DeepSeek call failed in round ${round}: ${err.message}`);
+      roundHistory.push(`API Error: ${err.message}`);
+      console.log('  ⏳ Waiting 15s before next attempt...');
+      await new Promise(r => setTimeout(r, 15000));
       continue;
     }
 
     console.log(`  💬 AI Summary: ${aiResponse.summary}`);
-    console.log(`  🐛 Bugs: ${(aiResponse.bugsFixed || []).length} | ✨ Improvements: ${(aiResponse.newFeatures || []).length} | 📁 Files: ${(aiResponse.changes || []).length}`);
+    console.log(`  🐛 Bugs: ${(aiResponse.bugsFixed || []).length} | ✨ Improvements: ${(aiResponse.newFeatures || []).length} | 📁 Changes: ${(aiResponse.changes || []).length}`);
 
-    // If AI has nothing left to do, stop early
+    // If no changes proposed
     if (!aiResponse.changes || aiResponse.changes.length === 0) {
-      console.log('\n  ✅ AI says nothing left to fix or improve. Session complete!');
-      roundSummaries.push(aiResponse.summary);
-      break;
+      consecutiveEmptyRounds++;
+      console.log(`  ℹ️  No changes proposed this round (${consecutiveEmptyRounds}/2).`);
+      roundSummaries.push(aiResponse.summary || 'No changes needed');
+      roundHistory.push(`No changes proposed: "${aiResponse.summary}"`);
+
+      if (consecutiveEmptyRounds >= 2 && !tscErrors) {
+        console.log('\n  ✅ Codebase is clean and fully optimized. Completing session gracefully.');
+        break;
+      }
+
+      await new Promise(r => setTimeout(r, 10000));
+      continue;
     }
 
-    // Phase C: Apply patches
-    console.log('  📝 Applying patches...');
+    // 3. Apply patches
+    console.log('  📝 Applying code changes...');
     const { applied, skipped } = applyChanges(aiResponse);
 
-    applied.forEach(f => console.log(`    ✅ Written: ${f}`));
+    applied.forEach(f => console.log(`    ✅ Modified: ${f}`));
     skipped.forEach(s => console.log(`    ⚠️  Skipped: ${s.file} — ${s.reason}`));
 
-    // Accumulate
-    allAppliedFiles.push(...applied);
-    allBugsFixed.push(...(aiResponse.bugsFixed || []));
-    allFeatures.push(...(aiResponse.newFeatures || []));
-    roundSummaries.push(aiResponse.summary);
-
-    // Phase D: Quick tsc verify
-    console.log('  🔨 Quick tsc verify after patches...');
-    const postTsc = runTscCheck();
-    if (postTsc) {
-      console.log(`  ⚠️  Still have TypeScript errors — will tackle in next round`);
+    if (applied.length > 0) {
+      consecutiveEmptyRounds = 0;
+      allAppliedFiles.push(...applied);
+      allBugsFixed.push(...(aiResponse.bugsFixed || []));
+      allFeatures.push(...(aiResponse.newFeatures || []));
+      roundSummaries.push(aiResponse.summary);
+      roundHistory.push(`Applied: [${applied.join(', ')}] — "${aiResponse.summary}"`);
     } else {
-      console.log('  ✅ TypeScript clean after this round');
+      consecutiveEmptyRounds++;
+      roundHistory.push(`Attempted "${aiResponse.summary}" but files were skipped: [${skipped.map(s => `${s.file}: ${s.reason}`).join(', ')}]`);
     }
 
-    // Brief pause between rounds to avoid rate limiting
-    if (timeLeft() > 10000) {
-      console.log('  ⏳ 5 second pause between rounds...');
-      await new Promise(r => setTimeout(r, 5000));
+    // 4. Quick TypeScript verify
+    console.log('  🔨 Quick TypeScript verification...');
+    const postTsc = runTscCheck();
+    if (postTsc) {
+      console.log(`  ⚠️  TypeScript issues remain — will feed directly into next round`);
+    } else {
+      console.log('  ✅ TypeScript clean after modifications');
+    }
+
+    // 5. Inter-round pacing
+    if (timeLeft() > 15000) {
+      console.log('  ⏳ 10s cooldown before next round...');
+      await new Promise(r => setTimeout(r, 10000));
     }
   }
 
-  // ── Final Report ──────────────────────────────────────────────────────────
+  // ── Session Wrap-up ───────────────────────────────────────────────────────
   const totalRounds = roundSummaries.length;
   const uniqueFiles = [...new Set(allAppliedFiles)];
 
@@ -392,10 +431,10 @@ async function main() {
   console.log('╔══════════════════════════════════════════════════════════╗');
   console.log('║            📊 30-Minute Session Complete!               ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
-  console.log(`  🔄 Rounds completed  : ${totalRounds}`);
-  console.log(`  📁 Files modified    : ${uniqueFiles.length} (${uniqueFiles.join(', ') || 'none'})`);
-  console.log(`  🐛 Bugs fixed        : ${allBugsFixed.length}`);
-  console.log(`  ✨ Improvements      : ${allFeatures.length}`);
+  console.log(`  🔄 Total rounds      : ${totalRounds}`);
+  console.log(`  📁 Files updated     : ${uniqueFiles.length} (${uniqueFiles.join(', ') || 'none'})`);
+  console.log(`  🐛 Bugs resolved     : ${allBugsFixed.length}`);
+  console.log(`  ✨ Improvements made : ${allFeatures.length}`);
   console.log(`  ⏱️  Total time        : ${elapsedMin()} minutes`);
   console.log('');
 
@@ -407,13 +446,13 @@ async function main() {
     allBugsFixed,
     allFeatures,
     roundSummaries,
-    buildPassed: null, // Set by workflow after final build verify
+    buildPassed: null,
   };
 
   writeReport(fullReport);
   updateChangelog(fullReport);
 
-  console.log('🔨 Workflow will now run final build check before pushing to main...');
+  console.log('🔨 Workflow proceeding to final build verification before deployment...');
 }
 
 function writeReport(report) {
