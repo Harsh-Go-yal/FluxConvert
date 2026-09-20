@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ToastProvider } from "@/components/ui/toast";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 
@@ -39,9 +40,11 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <Header />
-            {children}
-            <Footer />
+            <ToastProvider>
+              <Header />
+              {children}
+              <Footer />
+            </ToastProvider>
           </ThemeProvider>
         </body>
       </html>

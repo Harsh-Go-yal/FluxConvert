@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useDropzone, type Accept, type FileRejection } from 'react-dropzone';
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadCloud, File as FileIcon, X, Loader2, CheckCircle2 } from 'lucide-react';
-import { cn } from '@flux/ui';
+import { cn } from '@/lib/utils';
 import { formatBytes } from '@flux/utils';
 
 export type DropzoneFileStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
@@ -57,19 +57,12 @@ export function Dropzone({
 
   return (
     <div className={cn('w-full', className)}>
-      <motion.div
+      <div
         {...getRootProps()}
-        animate={{
-          scale: isDragActive ? 1.01 : 1,
-          boxShadow: isDragActive
-            ? '0 0 0 2px rgba(99,102,241,0.6), 0 20px 60px -20px rgba(99,102,241,0.5)'
-            : '0 0 0 0px rgba(99,102,241,0)',
-        }}
-        transition={{ type: 'spring', stiffness: 300, damping: 26 }}
         className={cn(
-          'relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors',
+          'relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-all duration-200',
           isDragActive
-            ? 'border-indigo-400/70 bg-indigo-500/5'
+            ? 'border-indigo-400/70 bg-indigo-500/5 shadow-[0_0_0_2px_rgba(99,102,241,0.6),0_20px_60px_-20px_rgba(99,102,241,0.5)] scale-[1.01]'
             : 'border-white/15 bg-white/[0.02] hover:border-white/25 hover:bg-white/[0.04]',
           isDragReject && 'border-red-500/60 bg-red-500/5',
         )}
@@ -90,7 +83,7 @@ export function Dropzone({
             {hint ?? `Up to ${formatBytes(maxSize)} per file`}
           </p>
         </div>
-      </motion.div>
+      </div>
 
       <AnimatePresence initial={false}>
         {files.length > 0 ? (

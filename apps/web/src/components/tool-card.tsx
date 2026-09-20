@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight } from 'lucide-react';
-import { cn } from '@flux/ui';
+import { cn } from '@/lib/utils';
 
 export interface ToolCardProps {
   href: string;

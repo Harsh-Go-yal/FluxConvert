@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
-import { cn } from '@flux/ui';
+import { cn } from '@/lib/utils';
 
 type ToastVariant = 'success' | 'error' | 'info';
 

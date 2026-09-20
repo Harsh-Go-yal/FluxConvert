@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * FluxConvert Autonomous AI Agent — 100% Full Codebase Access
+ * FluxConvert Autonomous AI Agent — 100% Full Monorepo Access
  * ─────────────────────────────────────────────────────────────────────────────
- * Autonomous coding loop running up to 30 minutes with full read & write
- * permissions across the ENTIRE repository (apps/web, packages/*, configs, UI).
- *
- * DeepSeek AI has complete freedom to:
- *   - Fix any bugs and compiler errors
- *   - Refactor and build new features / tools
- *   - Create and modify any source files across the monorepo
- *   - Enhance design, animations, performance, and functionality
+ * Autonomous coding loop running up to 30 minutes across the ENTIRE repository.
+ * Features:
+ *   - Auto-detects monorepo root reliably across all environments
+ *   - Dynamic repository tree & context discovery
+ *   - Token-safety with atomic round batches (1-3 files/round)
+ *   - Resilient JSON parser with partial-recovery for truncated responses
+ *   - Live TypeScript verification & changelog maintenance
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -18,12 +17,21 @@ const fs   = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// ── Paths ──────────────────────────────────────────────────────────────────
+// ── Root Discovery ─────────────────────────────────────────────────────────
+function findRepoRoot(startDir) {
+  let cur = path.resolve(startDir);
+  while (cur !== path.dirname(cur)) {
+    if (fs.existsSync(path.join(cur, 'turbo.json')) || fs.existsSync(path.join(cur, '.git'))) {
+      return cur;
+    }
+    cur = path.dirname(cur);
+  }
+  return path.resolve(startDir, '../../..');
+}
+
 const SCRIPT_DIR     = __dirname;
-const WEB_DIR        = path.resolve(SCRIPT_DIR, '..');
-const ROOT_DIR       = path.resolve(SCRIPT_DIR, '../../..') === path.resolve(SCRIPT_DIR, '../..') 
-                       ? path.resolve(SCRIPT_DIR, '../..') 
-                       : path.resolve(SCRIPT_DIR, '../..'); // Repository root
+const ROOT_DIR       = findRepoRoot(SCRIPT_DIR);
+const WEB_DIR        = path.join(ROOT_DIR, 'apps', 'web');
 const REPORT_PATH    = path.join(SCRIPT_DIR, 'ai-report.json');
 const CHANGELOG_PATH = path.join(ROOT_DIR, 'CHANGELOG.md');
 
@@ -33,11 +41,11 @@ const DEEPSEEK_API_URL  = 'https://api.deepseek.com/chat/completions';
 const DEEPSEEK_MODEL    = 'deepseek-chat';
 
 const CODING_DURATION_MS = 28 * 60 * 1000; // 28 minutes
-const MAX_ROUNDS         = 12;              // Up to 12 iterative rounds
-const MAX_FILE_CHARS     = 7000;            // File chunking limit
+const MAX_ROUNDS         = 12;              // Up to 12 rounds
+const MAX_FILE_CHARS     = 6000;            // Max context per file
 const START_TIME         = Date.now();
 
-// ── Recursive Repository Scanner ───────────────────────────────────────────
+// ── File Tree Scanner ──────────────────────────────────────────────────────
 const IGNORE_DIRS = new Set([
   'node_modules',
   '.git',
@@ -49,7 +57,7 @@ const IGNORE_DIRS = new Set([
   '.clerk',
 ]);
 
-const ALLOWED_EXTENSIONS = new Set([
+const ALLOWED_EXTS = new Set([
   '.ts',
   '.tsx',
   '.js',
@@ -58,79 +66,72 @@ const ALLOWED_EXTENSIONS = new Set([
   '.css',
   '.json',
   '.md',
-  '.yml',
-  '.yaml',
 ]);
 
 function scanRepoFiles(dir = ROOT_DIR, list = []) {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (IGNORE_DIRS.has(entry.name)) continue;
-      if (entry.name.startsWith('.env')) continue; // Skip secrets
+      if (IGNORE_DIRS.has(entry.name) || entry.name.startsWith('.env')) continue;
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         scanRepoFiles(fullPath, list);
-      } else {
-        const ext = path.extname(entry.name).toLowerCase();
-        if (ALLOWED_EXTENSIONS.has(ext)) {
-          const rel = path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/');
-          list.push(rel);
-        }
+      } else if (ALLOWED_EXTS.has(path.extname(entry.name).toLowerCase())) {
+        list.push(path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/'));
       }
     }
   } catch (err) {
-    console.error(`Error scanning ${dir}:`, err.message);
+    console.error(`Scanner error in ${dir}:`, err.message);
   }
   return list;
 }
 
-// Key files to always load into prompt context
-const PRIORITY_CONTEXT_FILES = [
+const CORE_CONTEXT_FILES = [
   'apps/web/next.config.ts',
   'apps/web/src/config/tools.ts',
   'apps/web/src/app/page.tsx',
   'apps/web/src/app/[tool]/page.tsx',
   'apps/web/src/app/globals.css',
-  'apps/web/src/components/client-file-uploader.tsx',
-  'apps/web/src/components/file-uploader/action-config.tsx',
-  'apps/web/src/components/file-uploader/index.tsx',
   'apps/web/src/components/header.tsx',
-  'package.json',
-  'apps/web/package.json',
+  'apps/web/src/components/tool-card.tsx',
+  'apps/web/src/components/dropzone.tsx',
+  'apps/web/src/components/ui/toast.tsx',
+  'packages/utils/format.ts',
 ];
 
 // ── System Prompt ──────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an elite principal software engineer and autonomous coding agent with 100% FULL READ/WRITE ACCESS to the entire "FluxConvert" repository.
+const SYSTEM_PROMPT = `You are an elite principal engineer autonomously upgrading the "FluxConvert" monorepo.
+You have 100% full read/write access to all files across the repository:
+- apps/web (Next.js 14/15 App Router, TailwindCSS, Framer Motion, pdf-lib, ShadCN UI)
+- packages/ui, packages/utils, packages/wasm
+- Configuration, tools definitions, styles, and routes
 
-You have total freedom and authority to modify, create, refactor, or delete any files across the codebase:
-- Web App: apps/web (Next.js 14/15, TypeScript, TailwindCSS, ShadCN UI, Framer Motion)
-- Monorepo Packages: packages/ui, packages/utils, packages/wasm
-- Configuration: root & app configs, tools definitions, styles, components, routes, libraries
+CRITICAL BATCH SIZE RULE:
+⚠️ You MUST modify or create at most 1 to 3 files per round (max 3 files).
+Do NOT attempt to write 5+ files in one round to avoid token cutoff.
+You have up to 12 rounds in this session, so build incrementally!
 
-YOUR MISSION:
-1. 🔴 FIX: Instantly resolve any TypeScript compilation errors or broken features.
-2. 🟢 BUILD: Implement new file conversion tools, PDF features, UI enhancements, and sleek micro-animations.
-3. 🟡 REFINE: Polish design, responsive layouts, error handling, performance, and user experience.
-4. 🔵 ARCHITECT: Write clean, type-safe, maintainable TypeScript code.
+GOALS:
+1. 🔴 FIX: Any TypeScript compiler errors or runtime bugs.
+2. 🟢 BUILD: New in-browser PDF & file tools (e.g., PDF to Image, Compress, Merge, OCR, Split, Watermark), beautiful UI components, and micro-animations.
+3. 🟡 POLISH: Loading spinners, error toasts, drag & drop states, responsive styling.
+4. 🔵 ARCHITECTURE: Clean types, modular utilities, fast client-side performance.
 
-RULES:
-- Return ONLY a valid JSON object matching the schema below. No markdown text outside the JSON.
-- Every file in "changes" must contain the FULL, COMPLETE code for that file (never partial diffs).
-- File paths can be relative to the repository root (e.g. "apps/web/src/app/page.tsx", "apps/web/next.config.ts", "packages/ui/...") or relative to "apps/web/".
-- You can create brand new files as needed!
-- NEVER delete working features without improving them.
-- If everything is completely optimal and no further improvements are needed, return "changes": [].
+OUTPUT RULES:
+- Output ONLY valid JSON.
+- Every "content" in "changes" must be the COMPLETE file content.
+- File paths are relative to the repository root (e.g. "apps/web/src/app/image-to-pdf/page.tsx", "packages/utils/format.ts").
+- If everything is clean and optimal with nothing left to improve, return "changes": [].
 
 JSON FORMAT:
 {
-  "summary": "Clear description of all fixes, improvements, or features added in this round",
-  "bugsFixed": ["Detailed description of bug fixed"],
-  "newFeatures": ["Detailed description of new feature or enhancement"],
+  "summary": "Concise 1-sentence summary of what was built or fixed this round",
+  "bugsFixed": ["Description of bug fixed"],
+  "newFeatures": ["Description of feature or UI polish added"],
   "changes": [
     {
-      "file": "apps/web/src/app/page.tsx",
-      "content": "// FULL file contents..."
+      "file": "apps/web/src/components/header.tsx",
+      "content": "// FULL file content..."
     }
   ]
 }`;
@@ -142,16 +143,14 @@ function elapsedMin() {
 }
 
 function timeLeft() {
-  const remaining = CODING_DURATION_MS - (Date.now() - START_TIME);
-  return Math.max(0, remaining);
+  return Math.max(0, CODING_DURATION_MS - (Date.now() - START_TIME));
 }
 
-function readFileContent(relativePath) {
-  let fullPath = path.resolve(ROOT_DIR, relativePath);
+function readFileSafe(relPath) {
+  let fullPath = path.resolve(ROOT_DIR, relPath);
   if (!fs.existsSync(fullPath)) {
-    fullPath = path.resolve(WEB_DIR, relativePath);
+    fullPath = path.resolve(WEB_DIR, relPath);
   }
-
   try {
     const content = fs.readFileSync(fullPath, 'utf-8');
     if (content.length > MAX_FILE_CHARS) {
@@ -159,7 +158,7 @@ function readFileContent(relativePath) {
     }
     return content;
   } catch {
-    return `[File not found: ${relativePath}]`;
+    return `[File not found: ${relPath}]`;
   }
 }
 
@@ -173,49 +172,54 @@ function runTscCheck() {
     });
     return '';
   } catch (err) {
-    const output = (err.stdout || '') + (err.stderr || '');
-    return output.substring(0, 3500);
+    const out = (err.stdout || '') + (err.stderr || '');
+    return out.substring(0, 3000);
   }
 }
 
-function readInitialErrors() {
-  const tscPath   = '/tmp/tsc-errors.txt';
-  const buildPath = '/tmp/build-errors.txt';
-  let result = '';
-  try { if (fs.existsSync(tscPath))   result += fs.readFileSync(tscPath, 'utf-8').substring(0, 2000); } catch {}
-  try { if (fs.existsSync(buildPath)) result += '\n' + fs.readFileSync(buildPath, 'utf-8').substring(0, 1500); } catch {}
-  return result;
-}
+// ── Resilient JSON Parser ──────────────────────────────────────────────────
 
-// ── Prompt Builder ──────────────────────────────────────────────────────────
+function parseDeepSeekJson(raw) {
+  if (!raw || typeof raw !== 'string') throw new Error('Empty response from DeepSeek');
 
-function buildRoundPrompt(round, repoFileList, sourceFiles, tscErrors, roundHistory, initialErrors) {
-  const sections = [];
+  // Strip possible markdown fences
+  let clean = raw.trim();
+  if (clean.startsWith('```json')) clean = clean.slice(7);
+  else if (clean.startsWith('```')) clean = clean.slice(3);
+  if (clean.endsWith('```')) clean = clean.slice(0, -3);
+  clean = clean.trim();
 
-  sections.push(`## Repository Overview (Full 100% Monorepo Access):\nTotal files available: ${repoFileList.length}\nFiles list sample:\n\`\`\`\n${repoFileList.slice(0, 45).join('\n')}\n${repoFileList.length > 45 ? `... and ${repoFileList.length - 45} more files` : ''}\n\`\`\``);
+  // Attempt direct JSON parse
+  try {
+    return JSON.parse(clean);
+  } catch (err) {
+    // If cut off, attempt partial recovery of closed file entries in changes array
+    console.log('  ⚠️ Attempting partial recovery from truncated JSON response...');
+    const matchSummary = clean.match(/"summary"\s*:\s*"([^"]+)"/);
+    const summary = matchSummary ? matchSummary[1] : 'Partial automated update';
 
-  if (round === 1 && initialErrors) {
-    sections.push(`## Initial Build/TypeScript Errors:\n\`\`\`\n${initialErrors}\n\`\`\``);
+    const changes = [];
+    const fileRegex = /"file"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    let match;
+    while ((match = fileRegex.exec(clean)) !== null) {
+      try {
+        const file = match[1];
+        const unescapedContent = JSON.parse(`"${match[2]}"`);
+        changes.push({ file, content: unescapedContent });
+      } catch {}
+    }
+
+    if (changes.length > 0) {
+      return {
+        summary: `${summary} (partially recovered)`,
+        bugsFixed: [],
+        newFeatures: ['Incremental code update'],
+        changes,
+      };
+    }
+
+    throw new Error(`JSON truncated & unrecoverable: ${err.message}`);
   }
-
-  sections.push(`## Current TypeScript Status (Round ${round} Live Scan):\n\`\`\`\n${tscErrors || '✅ 0 errors — TypeScript is completely clean!'}\n\`\`\``);
-
-  if (roundHistory.length > 0) {
-    sections.push(`## Progress from Previous Rounds:\n${roundHistory.map((h, i) => `Round ${i + 1}: ${h}`).join('\n')}`);
-  }
-
-  sections.push(`## Active Source Code Context:`);
-  for (const [filePath, content] of Object.entries(sourceFiles)) {
-    sections.push(`### ${filePath}\n\`\`\`tsx\n${content}\n\`\`\``);
-  }
-
-  if (tscErrors) {
-    sections.push(`## Round ${round} Priority Goal:\n🔴 TypeScript errors exist! Fix them immediately across the codebase.`);
-  } else {
-    sections.push(`## Round ${round} Priority Goal:\n🟢 TypeScript is clean! Build new tools, add polish, enhance animations, add file format converters, or improve UI components in FluxConvert.`);
-  }
-
-  return sections.join('\n\n');
 }
 
 // ── DeepSeek API ───────────────────────────────────────────────────────────
@@ -235,54 +239,54 @@ async function callDeepSeek(prompt, round) {
       ],
       response_format: { type: 'json_object' },
       max_tokens: 8192,
-      temperature: 0.25,
+      temperature: 0.2,
     }),
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`DeepSeek API ${response.status}: ${err.substring(0, 300)}`);
+    const errText = await response.text();
+    throw new Error(`DeepSeek API ${response.status}: ${errText.substring(0, 250)}`);
   }
 
   const data = await response.json();
-  const raw  = data.choices?.[0]?.message?.content;
-  if (!raw) throw new Error('Empty response from DeepSeek');
+  const choice = data.choices?.[0];
+  if (!choice || !choice.message?.content) {
+    throw new Error('Empty choice from DeepSeek API');
+  }
 
-  return JSON.parse(raw);
+  if (choice.finish_reason === 'length') {
+    console.log('  ⚠️ Note: AI reached token limit — parsing available contents.');
+  }
+
+  return parseDeepSeekJson(choice.message.content);
 }
 
-// ── 100% Unrestricted File Patching ────────────────────────────────────────
+// ── File Writing ───────────────────────────────────────────────────────────
 
-function resolveTargetFile(targetPath) {
-  const normalized = targetPath.replace(/\\/g, '/').replace(/^\/+/, '');
+function resolveTarget(targetPath) {
+  const norm = targetPath.replace(/\\/g, '/').replace(/^\/+/, '');
 
-  // Safety: Prevent writing outside repository or modifying .git database
-  if (normalized.startsWith('.git/') || normalized === '.git') {
-    return { ok: false, reason: 'Protected git internal directory' };
-  }
-  if (normalized.startsWith('.env') || normalized.includes('/.env')) {
-    return { ok: false, reason: 'Protected secret file' };
+  if (norm.startsWith('.git/') || norm === '.git' || norm.startsWith('.env')) {
+    return { ok: false, reason: 'Protected file/directory' };
   }
 
-  // Try direct relative to repo root
-  let fullPath = path.resolve(ROOT_DIR, normalized);
-  let relPath = path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/');
+  let full = path.resolve(ROOT_DIR, norm);
+  let rel = path.relative(ROOT_DIR, full).replace(/\\/g, '/');
 
-  // If path was given relative to apps/web (e.g. "src/app/page.tsx")
-  if (!fs.existsSync(fullPath) && !normalized.startsWith('apps/') && !normalized.startsWith('packages/')) {
-    const webCandidate = path.resolve(WEB_DIR, normalized);
-    if (fs.existsSync(webCandidate) || normalized.startsWith('src/')) {
-      fullPath = webCandidate;
-      relPath = path.relative(ROOT_DIR, fullPath).replace(/\\/g, '/');
+  // If path was provided relative to apps/web (e.g. "src/app/page.tsx")
+  if (!fs.existsSync(full) && !norm.startsWith('apps/') && !norm.startsWith('packages/')) {
+    const webCand = path.resolve(WEB_DIR, norm);
+    if (fs.existsSync(webCand) || norm.startsWith('src/')) {
+      full = webCand;
+      rel = path.relative(ROOT_DIR, full).replace(/\\/g, '/');
     }
   }
 
-  // Check that it stays inside repo
-  if (relPath.startsWith('..') || path.isAbsolute(relPath)) {
-    return { ok: false, reason: 'Path outside repository' };
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { ok: false, reason: 'Path escapes repository root' };
   }
 
-  return { ok: true, fullPath, relPath };
+  return { ok: true, fullPath: full, relPath: rel };
 }
 
 function applyChanges(aiResponse) {
@@ -291,13 +295,12 @@ function applyChanges(aiResponse) {
 
   for (const change of (aiResponse.changes || [])) {
     const { file, content } = change;
-
     if (!file || !content || typeof content !== 'string' || content.trim().length < 5) {
       skipped.push({ file: file || '?', reason: 'Invalid or empty content' });
       continue;
     }
 
-    const { ok, fullPath, relPath, reason } = resolveTargetFile(file);
+    const { ok, fullPath, relPath, reason } = resolveTarget(file);
     if (!ok) {
       skipped.push({ file, reason });
       continue;
@@ -327,8 +330,8 @@ function updateChangelog(report) {
     ``,
     `**Duration:** ~30 minutes | **Rounds Completed:** ${report.totalRounds}`,
     `**Files Modified/Created:** ${report.allAppliedFiles.length}`,
-    `**Bugs Fixed:** ${report.allBugsFixed.length}`,
-    `**Features & Enhancements:** ${report.allFeatures.length}`,
+    `**Bugs Resolved:** ${report.allBugsFixed.length}`,
+    `**Features & Polish Added:** ${report.allFeatures.length}`,
   ];
 
   if (report.roundSummaries.length > 0) {
@@ -342,12 +345,12 @@ function updateChangelog(report) {
   }
 
   if (report.allFeatures.length > 0) {
-    lines.push(`\n### Features & Polish Added`);
+    lines.push(`\n### Features & Enhancements`);
     report.allFeatures.forEach(f => lines.push(`- ${f}`));
   }
 
   if (report.allAppliedFiles.length > 0) {
-    lines.push(`\n### Codebase Files Touched`);
+    lines.push(`\n### Files Touched`);
     [...new Set(report.allAppliedFiles)].forEach(f => lines.push(`- \`${f}\``));
   }
 
@@ -381,18 +384,17 @@ async function main() {
     process.exit(0);
   }
 
-  const allAppliedFiles   = [];
-  const allBugsFixed      = [];
-  const allFeatures       = [];
-  const roundSummaries    = [];
-  const roundHistory      = [];
-  const initialErrors     = readInitialErrors();
+  const allAppliedFiles = [];
+  const allBugsFixed    = [];
+  const allFeatures     = [];
+  const roundSummaries  = [];
+  const roundHistory    = [];
 
   let consecutiveCleanRounds = 0;
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     if (timeLeft() <= 0) {
-      console.log(`\n⏰ Time limit reached (~28 min). Wrapping up session.`);
+      console.log(`\n⏰ 28-minute session duration reached. Wrapping up.`);
       break;
     }
 
@@ -401,23 +403,23 @@ async function main() {
     console.log(`│  🔄 ROUND ${String(round).padEnd(2)}  |  ⏱️  ${elapsedMin()} min elapsed  |  ${Math.round(timeLeft()/1000/60)} min left  │`);
     console.log(`└─────────────────────────────────────────────────────────┘`);
 
-    // 1. Scan monorepo
+    // 1. Scan repo & gather context
     console.log('  📂 Scanning repository tree & loading context...');
     const repoFileList = scanRepoFiles();
     const sourceFiles = {};
 
-    for (const relFile of PRIORITY_CONTEXT_FILES) {
-      sourceFiles[relFile] = readFileContent(relFile);
+    for (const relFile of CORE_CONTEXT_FILES) {
+      sourceFiles[relFile] = readFileSafe(relFile);
     }
 
-    // Include recently touched files in context
-    for (const recentFile of allAppliedFiles.slice(-4)) {
-      if (!sourceFiles[recentFile]) {
-        sourceFiles[recentFile] = readFileContent(recentFile);
+    // Include recently touched files
+    for (const recent of allAppliedFiles.slice(-4)) {
+      if (!sourceFiles[recent]) {
+        sourceFiles[recent] = readFileSafe(recent);
       }
     }
 
-    console.log('  🔍 Running live TypeScript compilation check...');
+    console.log('  🔍 Running TypeScript compilation check...');
     const tscErrors = runTscCheck();
     if (tscErrors) {
       console.log(`  🔴 TypeScript issues detected (${tscErrors.split('\n').filter(Boolean).length} lines)`);
@@ -425,15 +427,34 @@ async function main() {
       console.log('  🟢 TypeScript check passed cleanly');
     }
 
-    // 2. Call DeepSeek
+    // 2. Build prompt & call DeepSeek
     console.log('  🧠 DeepSeek is analyzing codebase & planning modifications...');
+    const promptSections = [
+      `## Repository Structure (${repoFileList.length} files available):\n\`\`\`\n${repoFileList.slice(0, 50).join('\n')}\n${repoFileList.length > 50 ? `... and ${repoFileList.length - 50} more files` : ''}\n\`\`\``,
+      `## Current TypeScript Status:\n\`\`\`\n${tscErrors || '✅ 0 errors — TypeScript is completely clean!'}\n\`\`\``,
+    ];
+
+    if (roundHistory.length > 0) {
+      promptSections.push(`## Recent Rounds History:\n${roundHistory.slice(-4).map((h, i) => `Round: ${h}`).join('\n')}`);
+    }
+
+    promptSections.push(`## Active Source Context:`);
+    for (const [fp, content] of Object.entries(sourceFiles)) {
+      promptSections.push(`### ${fp}\n\`\`\`tsx\n${content}\n\`\`\``);
+    }
+
+    if (tscErrors) {
+      promptSections.push(`## Round ${round} Mission:\n🔴 Fix the TypeScript errors listed above. Modify 1-3 files max.`);
+    } else {
+      promptSections.push(`## Round ${round} Mission:\n🟢 TypeScript is clean! Build new tools, add polish, micro-animations, or conversion features. Remember: 1-3 files max per round.`);
+    }
+
     let aiResponse;
     try {
-      const prompt = buildRoundPrompt(round, repoFileList, sourceFiles, tscErrors, roundHistory, initialErrors);
-      aiResponse   = await callDeepSeek(prompt, round);
+      aiResponse = await callDeepSeek(promptSections.join('\n\n'), round);
     } catch (err) {
-      console.error(`  ❌ DeepSeek call failed in round ${round}: ${err.message}`);
-      roundHistory.push(`API Error: ${err.message}`);
+      console.error(`  ❌ Round ${round} call issue: ${err.message}`);
+      roundHistory.push(`Notice: ${err.message}. Keep batch to 1-2 files.`);
       console.log('  ⏳ Waiting 15s before next attempt...');
       await new Promise(r => setTimeout(r, 15000));
       continue;
@@ -442,7 +463,7 @@ async function main() {
     console.log(`  💬 AI Summary: ${aiResponse.summary}`);
     console.log(`  🐛 Bugs Fixed: ${(aiResponse.bugsFixed || []).length} | ✨ Improvements: ${(aiResponse.newFeatures || []).length} | 📁 Changes: ${(aiResponse.changes || []).length}`);
 
-    // If no changes needed
+    // If clean / no changes
     if (!aiResponse.changes || aiResponse.changes.length === 0) {
       consecutiveCleanRounds++;
       console.log(`  ℹ️  No changes proposed this round (${consecutiveCleanRounds}/2).`);
@@ -458,7 +479,7 @@ async function main() {
       continue;
     }
 
-    // 3. Apply full codebase changes
+    // 3. Apply changes
     console.log('  📝 Writing code changes across repository...');
     const { applied, skipped } = applyChanges(aiResponse);
 
@@ -481,7 +502,7 @@ async function main() {
     console.log('  🔨 Quick TypeScript verification...');
     const postTsc = runTscCheck();
     if (postTsc) {
-      console.log(`  ⚠️  TypeScript issues remain — will feed directly into next round`);
+      console.log(`  ⚠️  TypeScript issues detected — feeding directly into next round`);
     } else {
       console.log('  ✅ TypeScript clean after round modifications');
     }
@@ -493,7 +514,7 @@ async function main() {
     }
   }
 
-  // ── Final Report ──────────────────────────────────────────────────────────
+  // ── Session Report ────────────────────────────────────────────────────────
   const totalRounds = roundSummaries.length;
   const uniqueFiles = [...new Set(allAppliedFiles)];
 
