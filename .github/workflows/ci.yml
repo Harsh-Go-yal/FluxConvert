@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: ["main"]
 
+# Skip CI when the AI bot pushes — it already verified the build before committing
+env:
+  SKIP_CI: ${{ contains(github.event.head_commit.message, '[AI-update]') }}
+
 jobs:
   web:
     name: Web (Next.js)
+    if: "!contains(github.event.head_commit.message, '[AI-update]')"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,6 +46,7 @@ jobs:
 
   api:
     name: API (NestJS)
+    if: "!contains(github.event.head_commit.message, '[AI-update]')"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -73,6 +79,7 @@ jobs:
 
   python-services:
     name: Python Microservices
+    if: "!contains(github.event.head_commit.message, '[AI-update]')"
     runs-on: ubuntu-latest
     strategy:
       matrix:
