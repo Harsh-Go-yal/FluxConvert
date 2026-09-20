@@ -16,7 +16,7 @@ jobs:
   ai-update:
     name: 🤖 AI Code Update
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50   # 30 min coding + 10 min build + 10 min buffer
 
     steps:
       # ── Step 1: Checkout ────────────────────────────────────────────────────
@@ -147,44 +147,51 @@ jobs:
               const fs = require('fs');
               const report = JSON.parse(fs.readFileSync('$REPORT_FILE', 'utf-8'));
               const buildPassed = '$BUILD_OUTCOME' === 'success';
-              const pushed = buildPassed && (report.changes || []).length > 0;
+              const totalFiles = (report.allAppliedFiles || []).length;
+              const pushed = buildPassed && totalFiles > 0;
 
               const lines = [
-                '# 🤖 FluxConvert AI Auto-Update Report',
+                '# 🤖 FluxConvert AI — 30-Minute Coding Session Report',
                 '',
-                '| | |',
-                '|---|---|',
-                \`| **Run time** | \${new Date().toISOString()} |\`,
-                \`| **Build status** | \${buildPassed ? '✅ Passed' : '❌ Failed'} |\`,
-                \`| **Pushed to main** | \${pushed ? '✅ Yes — Vercel deploying now' : '❌ No changes / Build failed'} |\`,
-                \`| **Files modified** | \${(report.changes || []).length} |\`,
-                '',
-                '## 📋 AI Summary',
-                report.summary || 'No summary provided.',
+                '| Metric | Value |',
+                '|--------|-------|',
+                \`| ⏱️ Session time | ~30 minutes |\`,
+                \`| 🔄 Rounds completed | \${report.totalRounds || 0} |\`,
+                \`| 📁 Files modified | \${totalFiles} |\`,
+                \`| 🐛 Bugs fixed | \${(report.allBugsFixed || []).length} |\`,
+                \`| ✨ Improvements | \${(report.allFeatures || []).length} |\`,
+                \`| 🔨 Build status | \${buildPassed ? '✅ Passed' : '❌ Failed'} |\`,
+                \`| 🚀 Pushed to main | \${pushed ? '✅ Yes — Vercel deploying' : '❌ No'} |\`,
                 '',
               ];
 
-              if ((report.bugsFixed || []).length > 0) {
-                lines.push('## 🐛 Bugs Fixed');
-                (report.bugsFixed || []).forEach(b => lines.push(\`- \${b}\`));
+              if ((report.roundSummaries || []).length > 0) {
+                lines.push('## 🔄 Round-by-Round Progress');
+                (report.roundSummaries || []).forEach((s, i) => lines.push(\`**Round \${i+1}:** \${s}\`));
                 lines.push('');
               }
 
-              if ((report.newFeatures || []).length > 0) {
-                lines.push('## ✨ Improvements Made');
-                (report.newFeatures || []).forEach(f => lines.push(\`- \${f}\`));
+              if ((report.allBugsFixed || []).length > 0) {
+                lines.push('## 🐛 All Bugs Fixed');
+                (report.allBugsFixed || []).forEach(b => lines.push(\`- \${b}\`));
                 lines.push('');
               }
 
-              if ((report.changes || []).length > 0) {
+              if ((report.allFeatures || []).length > 0) {
+                lines.push('## ✨ All Improvements');
+                (report.allFeatures || []).forEach(f => lines.push(\`- \${f}\`));
+                lines.push('');
+              }
+
+              if ((report.allAppliedFiles || []).length > 0) {
                 lines.push('## 📁 Files Modified');
-                (report.changes || []).forEach(c => lines.push(\`- \\\`\${c.file}\\\`\`));
+                (report.allAppliedFiles || []).forEach(f => lines.push(\`- \\\`\${f}\\\`\`));
                 lines.push('');
               }
 
               if (!buildPassed) {
-                lines.push('## ⚠️ Build failed — changes were NOT pushed');
-                lines.push('The live site is unaffected. The AI will retry with a corrected approach next cycle.');
+                lines.push('## ⚠️ Build failed — changes NOT pushed to main');
+                lines.push('The live site is safe. AI will retry next cycle.');
               }
 
               process.stdout.write(lines.join('\n'));
