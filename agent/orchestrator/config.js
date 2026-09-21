@@ -60,6 +60,9 @@ module.exports = {
   INSTRUCTION: (process.env.AI_INSTRUCTION || '').trim(),
   REPLY_TO: process.env.AI_REPLY_TO || '',
   REPLY_SUBJECT: process.env.AI_REPLY_SUBJECT || '',
+  // GitHub issue used as the owner's chat thread (reports are posted there every session)
+  INBOX_ISSUE: process.env.AI_REPLY_ISSUE || process.env.AI_INBOX_ISSUE || '',
+  ISSUE_TOKEN: process.env.GH_ISSUE_TOKEN || process.env.GH_TOKEN || '',
 
   // Email
   MAIL: {

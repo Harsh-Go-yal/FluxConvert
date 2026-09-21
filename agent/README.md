@@ -1,6 +1,6 @@
 # FluxConvert autonomous agent
 
-Runs on GitHub Actions — your laptop is never involved. Every 4 hours (and whenever you email it) the agent plans work, codes with [Aider](https://aider.chat) + DeepSeek, verifies each task, and delivers a pull request plus an email report. You can drive it entirely from your phone by replying to those emails.
+Runs on GitHub Actions — your laptop is never involved. Every 4 hours (and whenever you email it) the agent plans work, codes with [Aider](https://aider.chat) + DeepSeek, verifies each task, and delivers a pull request plus a report in the pinned **AI Agent Inbox** issue. You drive it entirely from the GitHub mobile app by commenting on that issue.
 
 ```
 schedule / email / "Run workflow"
@@ -17,7 +17,7 @@ schedule / email / "Run workflow"
  │ 5. learn  — update ROADMAP.md / MEMORY.md / CHANGELOG / history       │
  │ 6. ship   — push ai-dev, keep ONE PR ai-dev → main updated            │
  │            (AI_DELIVERY=push also merges it when the build is green)  │
- │ 7. report — job summary + email (reply to it to give orders)          │
+ │ 7. report — job summary + comment in the inbox issue (reply there)    │
  └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -32,18 +32,12 @@ Why `ai-dev`? Unmerged work accumulates there, so a session that runs before you
 | `DEEPSEEK_API_KEY` | yes | already set |
 | `GH_PAT` | yes | already set. Must have `repo` + `workflow` scopes (classic PAT) so the bot can push, open PRs and dispatch workflows. |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes | already set (needed by `next build`) |
-| `MAIL_USER` | for email | Gmail address the bot sends **from** and reads commands **in** (your own Gmail or a dedicated one like `fluxconvert.bot@gmail.com`) |
-| `MAIL_PASS` | for email | Gmail **App Password** for `MAIL_USER`: Google Account → Security → 2-Step Verification (must be on) → App passwords → create one named "FluxConvert". Paste the 16 characters. |
-| `MAIL_PASSPHRASE` | optional | if set, commands are only accepted when the email contains this word (defends against spoofed From headers) |
 
 ### Variables → same page → *Variables*
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AI_INBOX_ENABLED` | *(unset = off)* | set to `true` to enable the email inbox poller |
-| `MAIL_TO` | `harshgoyal0807@gmail.com` | where reports go |
-| `MAIL_OWNER` | `harshgoyal0807@gmail.com` | comma-separated addresses allowed to give commands |
-| `MAIL_SUBJECT_TAG` | *(none)* | e.g. `[Flux]` — if set, only emails whose subject contains it are obeyed (useful when `MAIL_USER` is your personal inbox) |
+| `AI_INBOX_ISSUE` | `1` | number of the pinned "AI Agent Inbox" issue (the chat thread) |
 | `AI_SESSION_MINUTES` | `30` | coding budget per session |
 | `AI_MAX_TASKS` | `6` | max tasks planned per session |
 | `AI_MAX_SESSION_USD` | `1.5` | stop planning new tasks past this estimated spend |
@@ -52,22 +46,9 @@ Why `ai-dev`? Unmerged work accumulates there, so a session that runs before you
 
 Then run the workflow once by hand: *Actions → 🤖 AI Agent Session → Run workflow* (leave the instruction empty for an autonomous session).
 
-## Email commands
+## Giving the agent work (GitHub app / issue thread — default)
 
-Reply to any report email (or send a new mail to `MAIL_USER`). The **first line** is the command:
-
-| Command | Effect |
-|---|---|
-| `status` | project status: open PR + CI state, recent sessions, roadmap, recent runs |
-| `roadmap` | the full roadmap |
-| `add <idea>` | append an owner request to the roadmap (top priority next session) |
-| `pause` / `resume` | stop / restart autonomous sessions (email instructions still work while paused) |
-| `merge` (or `approve`) | merge the open AI pull request into `main` |
-| `run` | start an autonomous session now |
-| `help` | this list |
-| anything else | start a session with your text as the instruction, e.g. *"Implement Rotate PDF end-to-end with a per-page preview"* — the report replies in the same thread |
-
-The inbox is polled every 10 minutes (GitHub may add delay). Only mail from `MAIL_OWNER` is obeyed; everything else is ignored and left unread.
+Comment on the pinned **🤖 AI Agent Inbox** issue (variable `AI_INBOX_ISSUE`) from the GitHub mobile app, the web, or by replying to its notification email. `ai-issue-inbox.yml` fires instantly on the comment; only the repository owner's comments are obeyed. Session reports are posted to the same thread, so the app notifies you when work is done. Commands are the same as below.
 
 ## Files
 
@@ -80,8 +61,8 @@ agent/
     context.js    repo signals: compact tree, orphan modules, tool coverage, tsc/lint/build
     git.js        branch prep (ai-dev), checkpoints, PR upsert
     state.js      ROADMAP / MEMORY / history / settings persistence
-    mail.js       SMTP send + IMAP read (owner allow-list, quote stripping)
-    inbox.js      email command handler
+    issue-inbox.js  GitHub-issue command handler (the chat thread)
+    inbox.js / mail.js  unused email channel (kept for reference; no workflow runs them)
     status.js     status snapshot
     report.js     Markdown / HTML report rendering
   prompts/conventions.md   read-only brief every coding run sees (how tools are wired, gotchas)

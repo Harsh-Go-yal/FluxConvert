@@ -1,0 +1,60 @@
+name: 💬 AI Inbox (issue thread)
+
+# Instant command channel: comment on the pinned "AI Agent Inbox" issue
+# (from GitHub, the mobile app, or by replying to GitHub's notification email).
+# Only comments by the repository owner on the inbox issue are handled.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+  pull-requests: write
+
+concurrency:
+  group: ai-issue-inbox-${{ github.event.comment.id }}
+
+jobs:
+  handle:
+    name: 💬 Handle owner command
+    if: >-
+      github.event.issue.number == fromJSON(vars.AI_INBOX_ISSUE || '0') &&
+      github.event.comment.user.login == github.repository_owner &&
+      !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    steps:
+      - name: Checkout agent/ only
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+          sparse-checkout: agent
+          sparse-checkout-cone-mode: true
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+
+      - name: Install orchestrator dependencies
+        working-directory: agent
+        run: npm ci --no-audit --no-fund
+
+      - name: 💬 Process command
+        run: node agent/orchestrator/issue-inbox.js
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}            # git push / PR merge (so CI + deploy trigger)
+          GH_ISSUE_TOKEN: ${{ secrets.GITHUB_TOKEN }} # comments as github-actions[bot] → owner gets notified
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          AI_DELIVERY: ${{ vars.AI_DELIVERY || 'pr' }}
+          AI_SESSION_MINUTES: ${{ vars.AI_SESSION_MINUTES || '30' }}
