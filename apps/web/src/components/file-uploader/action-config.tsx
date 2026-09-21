@@ -3,8 +3,12 @@ import { SplitConfig } from "./configs/split-config";
 import { SecurityConfig } from "./configs/security-config";
 import { WatermarkConfig } from "./configs/watermark-config";
 import { RemovePagesConfig } from "./configs/remove-pages-config";
+import { ExtractPagesConfig } from "./configs/extract-pages-config";
 import { CompressConfig } from "./configs/compress-config";
 import { ResizeConfig } from "./configs/resize-config";
+import { CropConfig, CropMargins } from "./configs/crop-config";
+import { OrganizeConfig } from "./configs/organize-config";
+import type { PageThumbnail } from "@/lib/pdf/thumbnails";
 
 interface ActionConfigProps {
     action: string;
@@ -20,6 +24,9 @@ interface ActionConfigProps {
     setEndPage: (val: number) => void;
     pagesToRemove: string;
     setPagesToRemove: (val: string) => void;
+    extractPages: string;
+    setExtractPages: (val: string) => void;
+    extractTotalPages: number;
     thumbnails: string[];
     generatingThumbnails: boolean;
     compressionMode: "percentage" | "target";
@@ -50,18 +57,28 @@ interface ActionConfigProps {
     resizeBackground: string;
     setResizeBackground: (val: string) => void;
     originalDimensions: { width: number; height: number } | null;
+    // Crop Props
+    cropMargins: CropMargins;
+    setCropMargins: (val: CropMargins) => void;
+    // Organize Props
+    organizeThumbnails: PageThumbnail[];
+    organizeOrder: number[];
+    setOrganizeOrder: (order: number[]) => void;
 }
 
 export function ActionConfig({
     action, files, setFiles, password, setPassword, watermarkText, setWatermarkText,
     startPage, setStartPage, endPage, setEndPage, pagesToRemove, setPagesToRemove,
+    extractPages, setExtractPages, extractTotalPages,
     thumbnails, generatingThumbnails,
     compressionMode, setCompressionMode, compressionPercentage, setCompressionPercentage,
     targetSize, setTargetSize, targetUnit, setTargetUnit,
     resizeWidth, setResizeWidth, resizeHeight, setResizeHeight, resizeUnit, setResizeUnit,
     maintainAspectRatio, setMaintainAspectRatio, resizeMode, setResizeMode,
     resizeDpi, setResizeDpi, resizeFormat, setResizeFormat, resizeQuality, setResizeQuality,
-    resizeBackground, setResizeBackground, originalDimensions
+    resizeBackground, setResizeBackground, originalDimensions,
+    cropMargins, setCropMargins,
+    organizeThumbnails, organizeOrder, setOrganizeOrder
 }: ActionConfigProps) {
 
     switch (action) {
@@ -80,6 +97,12 @@ export function ActionConfig({
                 setPagesToRemove={setPagesToRemove}
                 thumbnails={thumbnails}
                 generatingThumbnails={generatingThumbnails}
+            />;
+        case "extract-pages":
+            return <ExtractPagesConfig
+                pages={extractPages}
+                setPages={setExtractPages}
+                totalPages={extractTotalPages}
             />;
         case "compress-image":
             return <CompressConfig
@@ -115,6 +138,15 @@ export function ActionConfig({
                 setBackground={setResizeBackground}
                 originalWidth={originalDimensions?.width}
                 originalHeight={originalDimensions?.height}
+            />;
+        case "crop-pdf":
+            return <CropConfig margins={cropMargins} setMargins={setCropMargins} />;
+        case "organize-pdf":
+            return <OrganizeConfig
+                thumbnails={organizeThumbnails}
+                generatingThumbnails={generatingThumbnails}
+                order={organizeOrder}
+                setOrder={setOrganizeOrder}
             />;
         default:
             return null;

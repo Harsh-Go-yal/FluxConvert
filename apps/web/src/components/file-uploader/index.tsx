@@ -4,6 +4,11 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { determineProcessingMode, ProcessingMode } from "@/lib/file-utils";
 import { PdfService } from '@/services/pdf-service';
+import { extractPdfPages, reorderPdfPages } from '@/lib/pdf/operations';
+import { parsePageRanges } from '@/lib/pdf/ranges';
+import { renderPdfPageThumbnails, type PageThumbnail } from '@/lib/pdf/thumbnails';
+import { PDFDocument } from 'pdf-lib';
+import { CropMargins } from './configs/crop-config';
 import { ImageService } from '@/services/image-service';
 import mammoth from 'mammoth';
 import jsPDF from 'jspdf';
@@ -41,8 +46,12 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [startPage, setStartPage] = useState<number>(1);
     const [endPage, setEndPage] = useState<number>(1);
     const [pagesToRemove, setPagesToRemove] = useState<string>("");
+    const [extractPages, setExtractPages] = useState<string>("");
+    const [extractTotalPages, setExtractTotalPages] = useState<number>(0);
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
+    const [organizeThumbnails, setOrganizeThumbnails] = useState<PageThumbnail[]>([]);
+    const [organizeOrder, setOrganizeOrder] = useState<number[]>([]);
 
     // Compression State
     const [compressionMode, setCompressionMode] = useState<"percentage" | "target">("percentage");
@@ -61,6 +70,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [resizeQuality, setResizeQuality] = useState<number>(90);
     const [resizeBackground, setResizeBackground] = useState<string>("#ffffff");
     const [originalDimensions, setOriginalDimensions] = useState<{ width: number; height: number } | null>(null);
+
+    // Crop State
+    const [cropMargins, setCropMargins] = useState<CropMargins>({ top: 0, right: 0, bottom: 0, left: 0 });
 
     // Load image dimensions when file changes
     useEffect(() => {
@@ -85,7 +97,6 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     useEffect(() => {
         const generateThumbnails = async () => {
             if (files.length > 0 && files[0].type === 'application/pdf' && action === 'remove-pages') {
-                console.log("Starting thumbnail generation...");
                 setGeneratingThumbnails(true);
                 setThumbnails([]); // Clear existing
                 try {
@@ -104,11 +115,69 @@ export default function FileUploader({ initialAction }: { initialAction?: string
         generateThumbnails();
     }, [files, action]);
 
+    // Generate thumbnails when a PDF is uploaded and action is organize-pdf
+    useEffect(() => {
+        let cancelled = false;
+
+        const generateOrganizeThumbnails = async () => {
+            if (files.length > 0 && files[0].type === 'application/pdf' && action === 'organize-pdf') {
+                setGeneratingThumbnails(true);
+                setOrganizeThumbnails([]);
+                setOrganizeOrder([]);
+                try {
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const thumbs = await renderPdfPageThumbnails(arrayBuffer);
+                    if (!cancelled) {
+                        setOrganizeThumbnails(thumbs);
+                        setOrganizeOrder(thumbs.map((thumb) => thumb.index));
+                    }
+                } catch (error) {
+                    console.error("Error generating thumbnails:", error);
+                } finally {
+                    if (!cancelled) setGeneratingThumbnails(false);
+                }
+            } else if (!cancelled) {
+                setOrganizeThumbnails([]);
+                setOrganizeOrder([]);
+            }
+        };
+
+        generateOrganizeThumbnails();
+        return () => {
+            cancelled = true;
+        };
+    }, [files, action]);
+
+    // Determine the total page count for the extract-pages range selector
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPageCount = async () => {
+            if (files.length > 0 && files[0].type === 'application/pdf' && action === 'extract-pages') {
+                try {
+                    const thumbs = await PdfService.getThumbnails(files[0]);
+                    if (!cancelled) setExtractTotalPages(thumbs.length);
+                } catch (error) {
+                    console.error("Error determining page count:", error);
+                    if (!cancelled) setExtractTotalPages(0);
+                }
+            } else if (!cancelled) {
+                setExtractTotalPages(0);
+            }
+        };
+
+        loadPageCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [files, action]);
+
     // Clear download URL when action changes
     useEffect(() => {
         setDownloadUrl(null);
         setStatusMessage("");
         setPagesToRemove(""); // Reset input
+        setExtractPages(""); // Reset input
     }, [action]);
 
     // Update action and tab if initialAction changes
@@ -158,7 +227,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Auto-process when files are added if we are on a specific tool page
     useEffect(() => {
         // Don't auto-process for tools that require user input
-        const interactiveTools = ['remove-pages', 'split-pdf', 'protect-pdf', 'watermark-pdf', 'resize-image', 'compress-image'];
+        const interactiveTools = ['remove-pages', 'split-pdf', 'protect-pdf', 'watermark-pdf', 'resize-image', 'compress-image', 'organize-pdf'];
 
         if (initialAction && files.length > 0 && !downloadUrl && !isProcessing && action === initialAction && mode) {
             if (!interactiveTools.includes(initialAction)) {
@@ -196,6 +265,31 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                     blob = await PdfService.removePages(files[0], pagesToRemove);
                     filename = `${filename}_removed`;
                     ext = 'pdf';
+                } else if (action === "extract-pages") {
+                    const parsed = parsePageRanges(extractPages, extractTotalPages);
+                    if (parsed.error) {
+                        throw new Error(parsed.error);
+                    }
+                    if (parsed.indices.length === 0) {
+                        throw new Error("Select at least one page to extract.");
+                    }
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const result = await extractPdfPages(arrayBuffer, parsed.indices);
+                    blob = new Blob([new Uint8Array(result.bytes)], { type: 'application/pdf' });
+                    filename = `${filename}_extracted`;
+                    ext = 'pdf';
+                } else if (action === "organize-pdf") {
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const order = organizeOrder.length
+                        ? organizeOrder
+                        : organizeThumbnails.map((thumb) => thumb.index);
+                    if (!order.length) {
+                        throw new Error("No pages available to organize.");
+                    }
+                    const result = await reorderPdfPages(arrayBuffer, order);
+                    blob = new Blob([new Uint8Array(result.bytes)], { type: 'application/pdf' });
+                    filename = `${filename}_organized`;
+                    ext = 'pdf';
                 } else if (action === "rotate-pdf") {
                     blob = await PdfService.rotatePdf(files[0]);
                     filename = `${filename}_rotated`;
@@ -223,6 +317,30 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 } else if (action === "image-to-pdf") {
                     blob = await PdfService.imageToPdf(files);
                     filename = 'images_converted';
+                    ext = 'pdf';
+                } else if (action === "crop-pdf") {
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const doc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                    const pages = doc.getPages();
+
+                    const top = Math.max(0, cropMargins.top);
+                    const right = Math.max(0, cropMargins.right);
+                    const bottom = Math.max(0, cropMargins.bottom);
+                    const left = Math.max(0, cropMargins.left);
+
+                    pages.forEach((page) => {
+                        const { width, height } = page.getSize();
+                        const cropWidth = width - left - right;
+                        const cropHeight = height - top - bottom;
+                        if (cropWidth <= 0 || cropHeight <= 0) {
+                            throw new Error("Crop margins are too large for one or more pages.");
+                        }
+                        page.setCropBox(left, bottom, cropWidth, cropHeight);
+                    });
+
+                    const bytes = await doc.save();
+                    blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+                    filename = `${filename}_cropped`;
                     ext = 'pdf';
                 }
                 // --- IMAGE ACTIONS ---
@@ -516,6 +634,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         setEndPage={setEndPage}
                         pagesToRemove={pagesToRemove}
                         setPagesToRemove={setPagesToRemove}
+                        extractPages={extractPages}
+                        setExtractPages={setExtractPages}
+                        extractTotalPages={extractTotalPages}
                         thumbnails={thumbnails}
                         generatingThumbnails={generatingThumbnails}
                         compressionMode={compressionMode}
@@ -546,6 +667,11 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         resizeBackground={resizeBackground}
                         setResizeBackground={setResizeBackground}
                         originalDimensions={originalDimensions}
+                        cropMargins={cropMargins}
+                        setCropMargins={setCropMargins}
+                        organizeThumbnails={organizeThumbnails}
+                        organizeOrder={organizeOrder}
+                        setOrganizeOrder={setOrganizeOrder}
                     />
 
                     <ProcessingStatus
