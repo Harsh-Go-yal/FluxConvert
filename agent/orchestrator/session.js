@@ -326,6 +326,22 @@ async function main() {
   fs.writeFileSync(path.join(cfg.OUT_DIR, 'report.md'), finalMd);
   writeSummary(finalMd);
 
+  if (cfg.INBOX_ISSUE) {
+    const f = path.join(cfg.OUT_DIR, 'issue-report.md');
+    const headline = shipped.length
+      ? `### ✅ ${shipped.length} task${shipped.length === 1 ? '' : 's'} shipped — ${shipped[0].title}`
+      : result.tasks.length
+        ? '### ⚠️ Nothing shipped this session'
+        : '### ℹ️ No tasks planned this session';
+    const cta = result.delivery.html.includes('href')
+      ? `\n\n**Reply \`merge\` to ship this to \`${cfg.BASE_BRANCH}\`**, or reply with more work.`
+      : '';
+    const body = finalMd.replace(/^# .*\n/, ''); // drop the H1; the headline replaces it
+    fs.writeFileSync(f, `${headline}\n\n${body}${cta}`, 'utf-8');
+    const c = git.tryRun(`gh issue comment ${cfg.INBOX_ISSUE} --body-file "${f}"`, { env: { GH_TOKEN: cfg.ISSUE_TOKEN } });
+    log(c.ok ? `💬 report posted to issue #${cfg.INBOX_ISSUE}` : `💬 issue comment failed: ${c.out.slice(0, 200)}`);
+  }
+
   const subjectCore = shipped.length
     ? `${shipped.length} task${shipped.length === 1 ? '' : 's'} shipped — ${shipped[0].title}`
     : result.tasks.length

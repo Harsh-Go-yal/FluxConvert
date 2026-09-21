@@ -52,7 +52,11 @@ Why `ai-dev`? Unmerged work accumulates there, so a session that runs before you
 
 Then run the workflow once by hand: *Actions → 🤖 AI Agent Session → Run workflow* (leave the instruction empty for an autonomous session).
 
-## Email commands
+## Giving the agent work (GitHub app / issue thread — default)
+
+Comment on the pinned **🤖 AI Agent Inbox** issue (variable `AI_INBOX_ISSUE`) from the GitHub mobile app, the web, or by replying to its notification email. `ai-issue-inbox.yml` fires instantly on the comment; only the repository owner's comments are obeyed. Session reports are posted to the same thread, so the app notifies you when work is done. Commands are the same as below.
+
+## Email commands (optional legacy channel; needs `AI_INBOX_ENABLED=true` + `AI_EMAIL_ENABLED=true`)
 
 Reply to any report email (or send a new mail to `MAIL_USER`). The **first line** is the command:
 

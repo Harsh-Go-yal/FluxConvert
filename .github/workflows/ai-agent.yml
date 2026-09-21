@@ -1,8 +1,8 @@
 name: 🤖 AI Agent Session
 
 # Autonomous coding session: plan → Aider (DeepSeek) per task → tsc gate per task
-# → next build gate → push `ai-dev` + keep one PR open → email report.
-# See agent/README.md for setup and the email commands.
+# → next build gate → push `ai-dev` + keep one PR open → report in the inbox issue.
+# See agent/README.md for setup and the commands.
 
 on:
   schedule:
@@ -25,6 +25,10 @@ on:
         description: '(internal) email subject the report should reply to'
         required: false
         type: string
+      reply_issue:
+        description: '(internal) issue number to post the report to'
+        required: false
+        type: string
 
 concurrency:
   group: ai-agent
@@ -33,6 +37,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   session:
@@ -104,9 +109,13 @@ jobs:
           AI_INSTRUCTION: ${{ inputs.instruction }}
           AI_REPLY_TO: ${{ inputs.reply_to }}
           AI_REPLY_SUBJECT: ${{ inputs.reply_subject }}
-          # Email report (optional)
-          MAIL_USER: ${{ secrets.MAIL_USER }}
-          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          # GitHub issue chat thread: every report is posted there (owner gets notified)
+          AI_REPLY_ISSUE: ${{ inputs.reply_issue }}
+          AI_INBOX_ISSUE: ${{ vars.AI_INBOX_ISSUE }}
+          GH_ISSUE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Email report (optional; off unless AI_EMAIL_ENABLED=true — the issue thread is the default channel)
+          MAIL_USER: ${{ vars.AI_EMAIL_ENABLED == 'true' && secrets.MAIL_USER || '' }}
+          MAIL_PASS: ${{ vars.AI_EMAIL_ENABLED == 'true' && secrets.MAIL_PASS || '' }}
           MAIL_TO: ${{ vars.MAIL_TO || 'harshgoyal0807@gmail.com' }}
           MAIL_OWNER: ${{ vars.MAIL_OWNER || 'harshgoyal0807@gmail.com' }}
           MAIL_SMTP_HOST: ${{ vars.MAIL_SMTP_HOST || 'smtp.gmail.com' }}

@@ -2,7 +2,8 @@ name: 📥 AI Email Inbox
 
 # Polls the bot mailbox for commands from the owner (status / merge / pause /
 # add <idea> / free-text instructions) and answers or starts a session.
-# Enabled by the repo variable AI_INBOX_ENABLED=true. See agent/README.md.
+# Optional legacy channel. Enabled by the repo variable AI_INBOX_ENABLED=true; the
+# default channel is the GitHub issue thread (ai-issue-inbox.yml). See agent/README.md.
 
 on:
   schedule:
