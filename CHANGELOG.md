@@ -147,3 +147,8 @@
 - `apps/web/src/components/ui/file-card.tsx`
 - `apps/web/src/lib/pdf-extract-pages.ts`
 - `apps/web/src/components/ui/segmented-control.tsx`
+
+## 2026-09-21 — AI session
+- Shipped extract-pages: pick a page range and download just those pages.
+- Shipped crop-pdf: set margins to crop every page's CropBox.
+- Shipped organize-pdf: drag thumbnails to reorder pages and download the reordered PDF.

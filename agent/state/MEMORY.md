@@ -10,3 +10,6 @@ Durable facts for future sessions. One bullet each, non-obvious only.
 - apps/web/src/components/ui/index.ts is a barrel export; a missing module there breaks tsc for the whole app.
 - Dependencies cannot be installed during a session; only packages already in apps/web/package.json are usable.
 - The repo's CI (.github/workflows/ci.yml) runs on pull requests; the AI branch is `ai-dev` with one open PR to main.
+- The `comingSoon` flag approach for unimplemented tools was tried and discarded because it broke the production build in app/[tool]/page.tsx — if retried, verify the build before committing.
+- Options panels for wired tools follow a consistent pattern: add a config file under file-uploader/configs/, register it in action-config.tsx, and add a branch in file-uploader/index.tsx handleProcess.
+- eslint warnings are non-blocking in this repo; commits proceed with warnings as long as the production build passes.
