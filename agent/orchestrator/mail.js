@@ -5,6 +5,23 @@
  */
 const cfg = require('./config');
 
+const fs = require('fs');
+const path = require('path');
+const SEEN_PATH = path.join(cfg.STATE_DIR, 'inbox-seen.json');
+
+/** Message-IDs already handled (committed to the repo so every poll shares them). */
+function processedIds() {
+  try {
+    return JSON.parse(fs.readFileSync(SEEN_PATH, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+function markProcessed(ids) {
+  const all = [...new Set([...processedIds(), ...ids.filter(Boolean)])].slice(-300);
+  fs.writeFileSync(SEEN_PATH, JSON.stringify(all) + '\n', 'utf-8');
+}
+
 function configured() {
   return Boolean(cfg.MAIL.user && cfg.MAIL.pass && cfg.MAIL.to);
 }
@@ -68,20 +85,26 @@ async function fetchOwnerCommands({ markSeen = true } = {}) {
   });
   const items = [];
   const ignored = [];
+  const selfIds = [];
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
   try {
-    const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+    const since = new Date(Date.now() - 3 * 24 * 3600 * 1000);
     // Only ever fetch mail from the owner address(es); nothing else is downloaded or inspected.
+    // Read state is NOT used (Gmail marks self-sent mail as read); processed Message-IDs are
+    // tracked in agent/state/inbox-seen.json instead.
     const uidSet = new Set();
     for (const owner of cfg.MAIL.owners) {
-      const found = await client.search({ seen: false, since, from: owner }, { uid: true });
+      const found = await client.search({ since, from: owner }, { uid: true });
       (found || []).forEach((u) => uidSet.add(u));
     }
+    const seenIds = new Set(processedIds());
     for (const uid of [...uidSet].sort((a, b) => a - b)) {
       const msg = await client.fetchOne(uid, { source: true, envelope: true }, { uid: true });
       if (!msg || !msg.source) continue;
       const parsed = await simpleParser(msg.source);
+      if (parsed.messageId && seenIds.has(parsed.messageId)) continue;
+      if (parsed.date && Date.now() - new Date(parsed.date).getTime() > 2 * 24 * 3600 * 1000) continue; // stale
       const from = (parsed.from?.value?.[0]?.address || '').toLowerCase();
       const subject = parsed.subject || '';
       const text = cleanBody(parsed.text || htmlToText(parsed.html || ''));
@@ -92,19 +115,23 @@ async function fetchOwnerCommands({ markSeen = true } = {}) {
       const isSelf =
         Boolean(parsed.headers?.get('x-fluxconvert-bot')) ||
         (parsed.from?.value?.[0]?.name || '') === 'FluxConvert AI';
-      if (isSelf) continue;
+      if (isSelf) {
+        selfIds.push(parsed.messageId);
+        continue;
+      }
       if (isOwner && tagOk && passOk) {
         items.push({ uid, messageId: parsed.messageId, subject, from, text, date: parsed.date });
-        // Claim the command so it is not processed twice; unrelated mail is left untouched.
         if (markSeen) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
       } else {
-        ignored.push({ uid, reason: !isOwner ? 'not owner' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
+        ignored.push({ uid, messageId: parsed.messageId, reason: !isOwner ? 'not owner' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
       }
     }
   } finally {
     lock.release();
     await client.logout();
   }
+  // Remember everything we looked at so no mail is ever evaluated twice.
+  markProcessed([...selfIds, ...ignored.map((i) => i.messageId), ...items.map((i) => i.messageId)]);
   return { items, ignored };
 }
 
@@ -120,4 +147,4 @@ function htmlToText(html) {
     .replace(/&gt;/g, '>');
 }
 
-module.exports = { configured, send, fetchOwnerCommands, cleanBody };
+module.exports = { configured, send, fetchOwnerCommands, cleanBody, processedIds, markProcessed };

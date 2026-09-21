@@ -6,7 +6,7 @@ name: 📥 AI Email Inbox
 
 on:
   schedule:
-    - cron: '*/30 * * * *'         # every 30 minutes (GitHub may delay scheduled runs)
+    - cron: '*/10 * * * *'         # every 10 minutes (GitHub may add a few minutes of delay)
   workflow_dispatch:
 
 concurrency:

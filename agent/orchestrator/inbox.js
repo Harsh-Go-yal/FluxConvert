@@ -112,9 +112,12 @@ async function main() {
   if (skipped) return log('IMAP skipped');
   // Never log senders or subjects: on a public repo these logs are public.
   log(`📥 ${items.length} owner command(s), ${ignored?.length || 0} owner mail(s) ignored (${[...new Set((ignored || []).map((i) => i.reason))].join(', ') || '-'})`);
-  if (items.length === 0) return;
-
   checkoutWorkBranch();
+  if (items.length === 0) {
+    const r = commitState('chore(ai): inbox seen-list');
+    if (!r.noop) log(r.ok ? '💾 seen-list committed' : `⚠️ state push failed: ${r.out}`);
+    return;
+  }
   const instructions = [];
   let stateDirty = false;
   const summary = [];
@@ -177,8 +180,8 @@ async function main() {
     }
   }
 
-  if (stateDirty) {
-    const r = commitState('chore(ai): roadmap/settings update from owner email');
+  {
+    const r = commitState(stateDirty ? 'chore(ai): roadmap/settings update from owner email' : 'chore(ai): inbox seen-list');
     log(r.ok ? '💾 state committed & pushed' : `⚠️ state push failed: ${r.out}`);
   }
 

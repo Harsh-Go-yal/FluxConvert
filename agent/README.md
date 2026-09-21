@@ -67,7 +67,7 @@ Reply to any report email (or send a new mail to `MAIL_USER`). The **first line*
 | `help` | this list |
 | anything else | start a session with your text as the instruction, e.g. *"Implement Rotate PDF end-to-end with a per-page preview"* — the report replies in the same thread |
 
-The inbox is polled every 30 minutes (GitHub may add delay). Only mail from `MAIL_OWNER` is obeyed; everything else is ignored and left unread.
+The inbox is polled every 10 minutes (GitHub may add delay). Only mail from `MAIL_OWNER` is obeyed; everything else is ignored and left unread.
 
 ## Files
 
