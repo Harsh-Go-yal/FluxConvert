@@ -1,180 +1,122 @@
-name: 🤖 AI Auto-Update Agent
+name: 🤖 AI Agent Session
+
+# Autonomous coding session: plan → Aider (DeepSeek) per task → tsc gate per task
+# → next build gate → push `ai-dev` + keep one PR open → email report.
+# See agent/README.md for setup and the email commands.
 
 on:
   schedule:
-    - cron: '0 */4 * * *'   # Every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC
-  workflow_dispatch:          # Manual trigger for testing
+    - cron: '0 */4 * * *'          # every 4 hours (UTC)
+  workflow_dispatch:
+    inputs:
+      instruction:
+        description: 'What should the agent do? Leave empty for an autonomous session.'
+        required: false
+        type: string
+      session_minutes:
+        description: 'Coding budget in minutes (default: AI_SESSION_MINUTES variable or 30)'
+        required: false
+        type: string
+      reply_to:
+        description: '(internal) email Message-ID the report should reply to'
+        required: false
+        type: string
+      reply_subject:
+        description: '(internal) email subject the report should reply to'
+        required: false
+        type: string
 
 concurrency:
   group: ai-agent
-  cancel-in-progress: false  # Never cancel an in-progress AI run
+  cancel-in-progress: false        # never kill a running session; new ones queue
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  ai-update:
-    name: 🤖 AI Code Update
+  session:
+    name: 🤖 Plan → code → verify → deliver
     runs-on: ubuntu-latest
-    timeout-minutes: 50   # 30 min coding + 10 min build + 10 min buffer
+    timeout-minutes: 80
 
     steps:
-      # ── Step 1: Checkout ────────────────────────────────────────────────────
-      - name: Checkout repository
+      - name: Checkout (full history, PAT so pushes trigger CI on the PR)
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
 
-      # ── Step 2: Setup Node ──────────────────────────────────────────────────
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: |
+            agent/package-lock.json
             package-lock.json
-            apps/web/package-lock.json
 
-      # ── Step 3: Install deps ─────────────────────────────────────────────────
-      - name: Install dependencies
-        working-directory: apps/web
-        run: npm install
+      - name: Setup Python (for Aider)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: agent/requirements.txt
 
-      # ── Step 4: Collect TypeScript errors ───────────────────────────────────
-      - name: Collect TypeScript errors
-        working-directory: apps/web
+      - name: Install Aider
         run: |
-          echo "🔍 Running TypeScript check..."
-          npx tsc --noEmit 2>&1 | head -150 > /tmp/tsc-errors.txt || true
-          echo "--- TSC errors captured ---"
-          cat /tmp/tsc-errors.txt
+          python -m pip install -q --upgrade pip
+          python -m pip install -q -r agent/requirements.txt
+          aider --version
 
-      # ── Step 5: Collect build errors ────────────────────────────────────────
-      - name: Collect build errors (pre-AI)
-        working-directory: apps/web
-        continue-on-error: true
-        run: |
-          echo "🔨 Running initial build to capture errors..."
-          npm run build 2>&1 | tail -150 > /tmp/build-errors.txt || true
-          echo "--- Build errors captured ---"
-          tail -30 /tmp/build-errors.txt
-        env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      - name: Cache web node_modules
+        id: web-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/web/node_modules
+          key: web-nm-${{ runner.os }}-node22-${{ hashFiles('apps/web/package.json') }}
 
-      # ── Step 6: Run AI Agent ─────────────────────────────────────────────────
-      - name: 🤖 Run DeepSeek AI Agent (30-min coding loop)
+      - name: Install web dependencies
+        if: steps.web-cache.outputs.cache-hit != 'true'
         working-directory: apps/web
-        run: node scripts/ai-agent.js
+        run: npm install --no-audit --no-fund
+
+      - name: Install orchestrator dependencies
+        working-directory: agent
+        run: npm ci --no-audit --no-fund
+
+      - name: 🤖 Run session
+        run: node agent/orchestrator/session.js
         env:
+          # LLM
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # GitHub (PAT so that pushes/PRs trigger CI and gh can open PRs)
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          # Build
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          # Session tuning (repo Variables → Settings → Secrets and variables → Actions → Variables)
+          AI_SESSION_MINUTES: ${{ inputs.session_minutes || vars.AI_SESSION_MINUTES || '30' }}
+          AI_MAX_TASKS: ${{ vars.AI_MAX_TASKS || '6' }}
+          AI_MAX_SESSION_USD: ${{ vars.AI_MAX_SESSION_USD || '1.5' }}
+          AI_DELIVERY: ${{ vars.AI_DELIVERY || 'pr' }}        # pr | push
+          AI_CODER_MODEL: ${{ vars.AI_CODER_MODEL || 'deepseek/deepseek-chat' }}
+          # Instruction from the email inbox / manual dispatch
+          AI_INSTRUCTION: ${{ inputs.instruction }}
+          AI_REPLY_TO: ${{ inputs.reply_to }}
+          AI_REPLY_SUBJECT: ${{ inputs.reply_subject }}
+          # Email report (optional)
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ vars.MAIL_TO || 'harshgoyal0807@gmail.com' }}
+          MAIL_OWNER: ${{ vars.MAIL_OWNER || 'harshgoyal0807@gmail.com' }}
+          MAIL_SMTP_HOST: ${{ vars.MAIL_SMTP_HOST || 'smtp.gmail.com' }}
+          MAIL_SMTP_PORT: ${{ vars.MAIL_SMTP_PORT || '465' }}
 
-      # ── Step 7: Verify build passes after AI changes ─────────────────────────
-      - name: Verify build after AI changes
-        id: verify-build
-        working-directory: apps/web
-        continue-on-error: true
-        run: |
-          echo "🔨 Verifying build after AI changes..."
-          npm run build
-        env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-
-      # ── Step 8: Commit & push (only if build passed) ─────────────────────────
-      - name: Commit and push AI changes
-        if: steps.verify-build.outcome == 'success'
-        run: |
-          git config user.name "FluxConvert AI Bot"
-          git config user.email "ai-bot@fluxconvert.dev"
-
-          # Check if there are any changes to commit
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit this cycle — site is already optimal"
-          else
-            # Get the AI summary from the report
-            SUMMARY=$(node -e "
-              try {
-                const r = require('./apps/web/scripts/ai-report.json');
-                console.log((r.summary || 'Automated improvements').substring(0, 100));
-              } catch(e) { console.log('Automated improvements'); }
-            " 2>/dev/null || echo "Automated improvements")
-
-            git add -A
-            git commit -m "🤖 AI update: $SUMMARY [AI-update]"
-            git push origin main
-            echo "✅ Changes pushed to main — Vercel will deploy automatically!"
-          fi
-
-      # ── Step 9: Log skipped build ───────────────────────────────────────────
-      - name: Log build failure (changes NOT pushed)
-        if: steps.verify-build.outcome == 'failure'
-        run: |
-          echo "⚠️ AI-generated code failed the build check — changes were NOT pushed to main"
-          echo "The site is safe. Changes will be retried next cycle with a corrected prompt."
-
-      # ── Step 10: Write Job Summary (always runs) ─────────────────────────────
-      - name: Write job summary
+      - name: Upload session logs
         if: always()
-        run: |
-          REPORT_FILE="apps/web/scripts/ai-report.json"
-          BUILD_OUTCOME="${{ steps.verify-build.outcome }}"
-
-          if [ -f "$REPORT_FILE" ]; then
-            node -e "
-              const fs = require('fs');
-              const report = JSON.parse(fs.readFileSync('$REPORT_FILE', 'utf-8'));
-              const buildPassed = '$BUILD_OUTCOME' === 'success';
-              const totalFiles = (report.allAppliedFiles || []).length;
-              const pushed = buildPassed && totalFiles > 0;
-
-              const lines = [
-                '# 🤖 FluxConvert AI — 30-Minute Coding Session Report',
-                '',
-                '| Metric | Value |',
-                '|--------|-------|',
-                \`| ⏱️ Session time | ~30 minutes |\`,
-                \`| 🔄 Rounds completed | \${report.totalRounds || 0} |\`,
-                \`| 📁 Files modified | \${totalFiles} |\`,
-                \`| 🐛 Bugs fixed | \${(report.allBugsFixed || []).length} |\`,
-                \`| ✨ Improvements | \${(report.allFeatures || []).length} |\`,
-                \`| 🔨 Build status | \${buildPassed ? '✅ Passed' : '❌ Failed'} |\`,
-                \`| 🚀 Pushed to main | \${pushed ? '✅ Yes — Vercel deploying' : '❌ No'} |\`,
-                '',
-              ];
-
-              if ((report.roundSummaries || []).length > 0) {
-                lines.push('## 🔄 Round-by-Round Progress');
-                (report.roundSummaries || []).forEach((s, i) => lines.push(\`**Round \${i+1}:** \${s}\`));
-                lines.push('');
-              }
-
-              if ((report.allBugsFixed || []).length > 0) {
-                lines.push('## 🐛 All Bugs Fixed');
-                (report.allBugsFixed || []).forEach(b => lines.push(\`- \${b}\`));
-                lines.push('');
-              }
-
-              if ((report.allFeatures || []).length > 0) {
-                lines.push('## ✨ All Improvements');
-                (report.allFeatures || []).forEach(f => lines.push(\`- \${f}\`));
-                lines.push('');
-              }
-
-              if ((report.allAppliedFiles || []).length > 0) {
-                lines.push('## 📁 Files Modified');
-                (report.allAppliedFiles || []).forEach(f => lines.push(\`- \\\`\${f}\\\`\`));
-                lines.push('');
-              }
-
-              if (!buildPassed) {
-                lines.push('## ⚠️ Build failed — changes NOT pushed to main');
-                lines.push('The live site is safe. AI will retry next cycle.');
-              }
-
-              process.stdout.write(lines.join('\n'));
-            " >> $GITHUB_STEP_SUMMARY
-          else
-            echo "# 🤖 AI Auto-Update" >> $GITHUB_STEP_SUMMARY
-            echo "No report file found this cycle." >> $GITHUB_STEP_SUMMARY
-          fi
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-session-${{ github.run_id }}
+          path: agent/out
+          retention-days: 14
+          if-no-files-found: ignore

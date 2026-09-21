@@ -1,0 +1,20 @@
+{
+  "name": "fluxconvert-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Orchestrator for the autonomous DeepSeek/Aider coding agent (runs on GitHub Actions).",
+  "type": "commonjs",
+  "scripts": {
+    "session": "node orchestrator/session.js",
+    "inbox": "node orchestrator/inbox.js",
+    "status": "node orchestrator/status.js"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.16"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

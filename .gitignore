@@ -19,3 +19,7 @@ yarn-error.log*
 # OS / editor
 .DS_Store
 .vscode/
+
+# AI agent scratch
+.aider*
+agent/out/

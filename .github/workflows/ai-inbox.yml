@@ -1,0 +1,63 @@
+name: 📥 AI Email Inbox
+
+# Polls the bot mailbox for commands from the owner (status / merge / pause /
+# add <idea> / free-text instructions) and answers or starts a session.
+# Enabled by the repo variable AI_INBOX_ENABLED=true. See agent/README.md.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'         # every 30 minutes (GitHub may delay scheduled runs)
+  workflow_dispatch:
+
+concurrency:
+  group: ai-inbox
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  poll:
+    name: 📥 Read owner email
+    if: vars.AI_INBOX_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+
+    steps:
+      - name: Checkout agent/ only
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+          sparse-checkout: agent
+          sparse-checkout-cone-mode: true
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+
+      - name: Install orchestrator dependencies
+        working-directory: agent
+        run: npm ci --no-audit --no-fund
+
+      - name: 📥 Process inbox
+        run: node agent/orchestrator/inbox.js
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_TO: ${{ vars.MAIL_TO || 'harshgoyal0807@gmail.com' }}
+          MAIL_OWNER: ${{ vars.MAIL_OWNER || 'harshgoyal0807@gmail.com' }}
+          MAIL_SUBJECT_TAG: ${{ vars.MAIL_SUBJECT_TAG }}
+          MAIL_PASSPHRASE: ${{ secrets.MAIL_PASSPHRASE }}
+          MAIL_SMTP_HOST: ${{ vars.MAIL_SMTP_HOST || 'smtp.gmail.com' }}
+          MAIL_SMTP_PORT: ${{ vars.MAIL_SMTP_PORT || '465' }}
+          MAIL_IMAP_HOST: ${{ vars.MAIL_IMAP_HOST || 'imap.gmail.com' }}
+          MAIL_IMAP_PORT: ${{ vars.MAIL_IMAP_PORT || '993' }}
+          AI_DELIVERY: ${{ vars.AI_DELIVERY || 'pr' }}
+          AI_SESSION_MINUTES: ${{ vars.AI_SESSION_MINUTES || '30' }}
