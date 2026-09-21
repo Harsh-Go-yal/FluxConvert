@@ -7,6 +7,8 @@ import { ExtractPagesConfig } from "./configs/extract-pages-config";
 import { CompressConfig } from "./configs/compress-config";
 import { ResizeConfig } from "./configs/resize-config";
 import { CropConfig, CropMargins } from "./configs/crop-config";
+import { OrganizeConfig } from "./configs/organize-config";
+import type { PageThumbnail } from "@/lib/pdf/thumbnails";
 
 interface ActionConfigProps {
     action: string;
@@ -58,6 +60,10 @@ interface ActionConfigProps {
     // Crop Props
     cropMargins: CropMargins;
     setCropMargins: (val: CropMargins) => void;
+    // Organize Props
+    organizeThumbnails: PageThumbnail[];
+    organizeOrder: number[];
+    setOrganizeOrder: (order: number[]) => void;
 }
 
 export function ActionConfig({
@@ -71,7 +77,8 @@ export function ActionConfig({
     maintainAspectRatio, setMaintainAspectRatio, resizeMode, setResizeMode,
     resizeDpi, setResizeDpi, resizeFormat, setResizeFormat, resizeQuality, setResizeQuality,
     resizeBackground, setResizeBackground, originalDimensions,
-    cropMargins, setCropMargins
+    cropMargins, setCropMargins,
+    organizeThumbnails, organizeOrder, setOrganizeOrder
 }: ActionConfigProps) {
 
     switch (action) {
@@ -134,6 +141,13 @@ export function ActionConfig({
             />;
         case "crop-pdf":
             return <CropConfig margins={cropMargins} setMargins={setCropMargins} />;
+        case "organize-pdf":
+            return <OrganizeConfig
+                thumbnails={organizeThumbnails}
+                generatingThumbnails={generatingThumbnails}
+                order={organizeOrder}
+                setOrder={setOrganizeOrder}
+            />;
         default:
             return null;
     }
