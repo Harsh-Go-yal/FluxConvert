@@ -72,8 +72,13 @@ async function fetchOwnerCommands({ markSeen = true } = {}) {
   const lock = await client.getMailboxLock('INBOX');
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-    const uids = await client.search({ seen: false, since }, { uid: true });
-    for (const uid of uids || []) {
+    // Only ever fetch mail from the owner address(es); nothing else is downloaded or inspected.
+    const uidSet = new Set();
+    for (const owner of cfg.MAIL.owners) {
+      const found = await client.search({ seen: false, since, from: owner }, { uid: true });
+      (found || []).forEach((u) => uidSet.add(u));
+    }
+    for (const uid of [...uidSet].sort((a, b) => a - b)) {
       const msg = await client.fetchOne(uid, { source: true, envelope: true }, { uid: true });
       if (!msg || !msg.source) continue;
       const parsed = await simpleParser(msg.source);
@@ -93,7 +98,7 @@ async function fetchOwnerCommands({ markSeen = true } = {}) {
         // Claim the command so it is not processed twice; unrelated mail is left untouched.
         if (markSeen) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
       } else {
-        ignored.push({ uid, from, subject, reason: !isOwner ? 'not owner' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
+        ignored.push({ uid, reason: !isOwner ? 'not owner' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
       }
     }
   } finally {

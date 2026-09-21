@@ -102,8 +102,8 @@ async function main() {
   }
   const { items, ignored, skipped } = await mail.fetchOwnerCommands();
   if (skipped) return log('IMAP skipped');
-  log(`📥 ${items.length} owner message(s), ${ignored?.length || 0} ignored`);
-  ignored?.forEach((i) => log(`   ignored ${i.from} "${i.subject}" (${i.reason})`));
+  // Never log senders or subjects: on a public repo these logs are public.
+  log(`📥 ${items.length} owner command(s), ${ignored?.length || 0} owner mail(s) ignored (${[...new Set((ignored || []).map((i) => i.reason))].join(', ') || '-'})`);
   if (items.length === 0) return;
 
   checkoutWorkBranch();
@@ -113,7 +113,7 @@ async function main() {
 
   for (const item of items.sort((a, b) => new Date(a.date) - new Date(b.date))) {
     const { cmd, arg } = parseCommand(item);
-    log(`→ ${cmd}${arg ? `: ${arg.slice(0, 80)}` : ''}  (from ${item.from})`);
+    log(`→ ${cmd}${cmd === 'instruct' || cmd === 'add' ? ` (${arg.length} chars)` : ''}`);
     try {
       switch (cmd) {
         case 'help':
@@ -160,7 +160,7 @@ async function main() {
         default:
           instructions.push({ item, text: arg });
       }
-      summary.push(`${cmd} ← ${item.subject}`);
+      summary.push(cmd);
     } catch (err) {
       log(`   error: ${err.message}`);
       try {
