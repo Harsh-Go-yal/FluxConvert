@@ -6,6 +6,8 @@ import { determineProcessingMode, ProcessingMode } from "@/lib/file-utils";
 import { PdfService } from '@/services/pdf-service';
 import { extractPdfPages } from '@/lib/pdf/operations';
 import { parsePageRanges } from '@/lib/pdf/ranges';
+import { PDFDocument } from 'pdf-lib';
+import { CropMargins } from './configs/crop-config';
 import { ImageService } from '@/services/image-service';
 import mammoth from 'mammoth';
 import jsPDF from 'jspdf';
@@ -65,6 +67,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [resizeQuality, setResizeQuality] = useState<number>(90);
     const [resizeBackground, setResizeBackground] = useState<string>("#ffffff");
     const [originalDimensions, setOriginalDimensions] = useState<{ width: number; height: number } | null>(null);
+
+    // Crop State
+    const [cropMargins, setCropMargins] = useState<CropMargins>({ top: 0, right: 0, bottom: 0, left: 0 });
 
     // Load image dimensions when file changes
     useEffect(() => {
@@ -264,6 +269,30 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 } else if (action === "image-to-pdf") {
                     blob = await PdfService.imageToPdf(files);
                     filename = 'images_converted';
+                    ext = 'pdf';
+                } else if (action === "crop-pdf") {
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const doc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+                    const pages = doc.getPages();
+
+                    const top = Math.max(0, cropMargins.top);
+                    const right = Math.max(0, cropMargins.right);
+                    const bottom = Math.max(0, cropMargins.bottom);
+                    const left = Math.max(0, cropMargins.left);
+
+                    pages.forEach((page) => {
+                        const { width, height } = page.getSize();
+                        const cropWidth = width - left - right;
+                        const cropHeight = height - top - bottom;
+                        if (cropWidth <= 0 || cropHeight <= 0) {
+                            throw new Error("Crop margins are too large for one or more pages.");
+                        }
+                        page.setCropBox(left, bottom, cropWidth, cropHeight);
+                    });
+
+                    const bytes = await doc.save();
+                    blob = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+                    filename = `${filename}_cropped`;
                     ext = 'pdf';
                 }
                 // --- IMAGE ACTIONS ---
@@ -590,6 +619,8 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         resizeBackground={resizeBackground}
                         setResizeBackground={setResizeBackground}
                         originalDimensions={originalDimensions}
+                        cropMargins={cropMargins}
+                        setCropMargins={setCropMargins}
                     />
 
                     <ProcessingStatus

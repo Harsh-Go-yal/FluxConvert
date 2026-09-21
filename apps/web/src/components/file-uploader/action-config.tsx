@@ -6,6 +6,7 @@ import { RemovePagesConfig } from "./configs/remove-pages-config";
 import { ExtractPagesConfig } from "./configs/extract-pages-config";
 import { CompressConfig } from "./configs/compress-config";
 import { ResizeConfig } from "./configs/resize-config";
+import { CropConfig, CropMargins } from "./configs/crop-config";
 
 interface ActionConfigProps {
     action: string;
@@ -54,6 +55,9 @@ interface ActionConfigProps {
     resizeBackground: string;
     setResizeBackground: (val: string) => void;
     originalDimensions: { width: number; height: number } | null;
+    // Crop Props
+    cropMargins: CropMargins;
+    setCropMargins: (val: CropMargins) => void;
 }
 
 export function ActionConfig({
@@ -66,7 +70,8 @@ export function ActionConfig({
     resizeWidth, setResizeWidth, resizeHeight, setResizeHeight, resizeUnit, setResizeUnit,
     maintainAspectRatio, setMaintainAspectRatio, resizeMode, setResizeMode,
     resizeDpi, setResizeDpi, resizeFormat, setResizeFormat, resizeQuality, setResizeQuality,
-    resizeBackground, setResizeBackground, originalDimensions
+    resizeBackground, setResizeBackground, originalDimensions,
+    cropMargins, setCropMargins
 }: ActionConfigProps) {
 
     switch (action) {
@@ -127,6 +132,8 @@ export function ActionConfig({
                 originalWidth={originalDimensions?.width}
                 originalHeight={originalDimensions?.height}
             />;
+        case "crop-pdf":
+            return <CropConfig margins={cropMargins} setMargins={setCropMargins} />;
         default:
             return null;
     }
