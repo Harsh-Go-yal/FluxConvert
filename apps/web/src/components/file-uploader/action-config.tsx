@@ -3,6 +3,7 @@ import { SplitConfig } from "./configs/split-config";
 import { SecurityConfig } from "./configs/security-config";
 import { WatermarkConfig } from "./configs/watermark-config";
 import { RemovePagesConfig } from "./configs/remove-pages-config";
+import { ExtractPagesConfig } from "./configs/extract-pages-config";
 import { CompressConfig } from "./configs/compress-config";
 import { ResizeConfig } from "./configs/resize-config";
 
@@ -20,6 +21,9 @@ interface ActionConfigProps {
     setEndPage: (val: number) => void;
     pagesToRemove: string;
     setPagesToRemove: (val: string) => void;
+    extractPages: string;
+    setExtractPages: (val: string) => void;
+    extractTotalPages: number;
     thumbnails: string[];
     generatingThumbnails: boolean;
     compressionMode: "percentage" | "target";
@@ -55,6 +59,7 @@ interface ActionConfigProps {
 export function ActionConfig({
     action, files, setFiles, password, setPassword, watermarkText, setWatermarkText,
     startPage, setStartPage, endPage, setEndPage, pagesToRemove, setPagesToRemove,
+    extractPages, setExtractPages, extractTotalPages,
     thumbnails, generatingThumbnails,
     compressionMode, setCompressionMode, compressionPercentage, setCompressionPercentage,
     targetSize, setTargetSize, targetUnit, setTargetUnit,
@@ -80,6 +85,12 @@ export function ActionConfig({
                 setPagesToRemove={setPagesToRemove}
                 thumbnails={thumbnails}
                 generatingThumbnails={generatingThumbnails}
+            />;
+        case "extract-pages":
+            return <ExtractPagesConfig
+                pages={extractPages}
+                setPages={setExtractPages}
+                totalPages={extractTotalPages}
             />;
         case "compress-image":
             return <CompressConfig

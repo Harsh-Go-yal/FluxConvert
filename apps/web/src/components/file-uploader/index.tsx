@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { determineProcessingMode, ProcessingMode } from "@/lib/file-utils";
 import { PdfService } from '@/services/pdf-service';
+import { extractPdfPages } from '@/lib/pdf/operations';
+import { parsePageRanges } from '@/lib/pdf/ranges';
 import { ImageService } from '@/services/image-service';
 import mammoth from 'mammoth';
 import jsPDF from 'jspdf';
@@ -41,6 +43,8 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [startPage, setStartPage] = useState<number>(1);
     const [endPage, setEndPage] = useState<number>(1);
     const [pagesToRemove, setPagesToRemove] = useState<string>("");
+    const [extractPages, setExtractPages] = useState<string>("");
+    const [extractTotalPages, setExtractTotalPages] = useState<number>(0);
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
 
@@ -85,7 +89,6 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     useEffect(() => {
         const generateThumbnails = async () => {
             if (files.length > 0 && files[0].type === 'application/pdf' && action === 'remove-pages') {
-                console.log("Starting thumbnail generation...");
                 setGeneratingThumbnails(true);
                 setThumbnails([]); // Clear existing
                 try {
@@ -104,11 +107,36 @@ export default function FileUploader({ initialAction }: { initialAction?: string
         generateThumbnails();
     }, [files, action]);
 
+    // Determine the total page count for the extract-pages range selector
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPageCount = async () => {
+            if (files.length > 0 && files[0].type === 'application/pdf' && action === 'extract-pages') {
+                try {
+                    const thumbs = await PdfService.getThumbnails(files[0]);
+                    if (!cancelled) setExtractTotalPages(thumbs.length);
+                } catch (error) {
+                    console.error("Error determining page count:", error);
+                    if (!cancelled) setExtractTotalPages(0);
+                }
+            } else if (!cancelled) {
+                setExtractTotalPages(0);
+            }
+        };
+
+        loadPageCount();
+        return () => {
+            cancelled = true;
+        };
+    }, [files, action]);
+
     // Clear download URL when action changes
     useEffect(() => {
         setDownloadUrl(null);
         setStatusMessage("");
         setPagesToRemove(""); // Reset input
+        setExtractPages(""); // Reset input
     }, [action]);
 
     // Update action and tab if initialAction changes
@@ -195,6 +223,19 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 } else if (action === "remove-pages") {
                     blob = await PdfService.removePages(files[0], pagesToRemove);
                     filename = `${filename}_removed`;
+                    ext = 'pdf';
+                } else if (action === "extract-pages") {
+                    const parsed = parsePageRanges(extractPages, extractTotalPages);
+                    if (parsed.error) {
+                        throw new Error(parsed.error);
+                    }
+                    if (parsed.indices.length === 0) {
+                        throw new Error("Select at least one page to extract.");
+                    }
+                    const arrayBuffer = await files[0].arrayBuffer();
+                    const result = await extractPdfPages(arrayBuffer, parsed.indices);
+                    blob = new Blob([new Uint8Array(result.bytes)], { type: 'application/pdf' });
+                    filename = `${filename}_extracted`;
                     ext = 'pdf';
                 } else if (action === "rotate-pdf") {
                     blob = await PdfService.rotatePdf(files[0]);
@@ -516,6 +557,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         setEndPage={setEndPage}
                         pagesToRemove={pagesToRemove}
                         setPagesToRemove={setPagesToRemove}
+                        extractPages={extractPages}
+                        setExtractPages={setExtractPages}
+                        extractTotalPages={extractTotalPages}
                         thumbnails={thumbnails}
                         generatingThumbnails={generatingThumbnails}
                         compressionMode={compressionMode}
