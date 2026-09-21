@@ -18,7 +18,7 @@ async function send({ subject, html, text, inReplyTo, references, to }) {
     secure: cfg.MAIL.smtpPort === 465,
     auth: { user: cfg.MAIL.user, pass: cfg.MAIL.pass },
   });
-  const headers = {};
+  const headers = { 'X-FluxConvert-Bot': '1' }; // lets the inbox poller skip its own mail
   if (inReplyTo) {
     headers['In-Reply-To'] = inReplyTo;
     headers['References'] = references || inReplyTo;
@@ -83,16 +83,17 @@ async function fetchOwnerCommands({ markSeen = true } = {}) {
       const isOwner = cfg.MAIL.owners.includes(from);
       const tagOk = !cfg.MAIL.subjectTag || subject.includes(cfg.MAIL.subjectTag);
       const passOk = !cfg.MAIL.passphrase || (subject + '\n' + text).includes(cfg.MAIL.passphrase);
-      // Skip our own report emails that landed in this inbox (e.g. bot == owner mailbox).
-      const isSelf = from === cfg.MAIL.user.toLowerCase() && /^(\[FluxConvert AI\]|FluxConvert AI)/i.test(subject);
-      if (isOwner && tagOk && passOk && !isSelf) {
+      // Mail the bot sent itself (reports, replies) — never a command, and left unread for the owner.
+      const isSelf =
+        Boolean(parsed.headers?.get('x-fluxconvert-bot')) ||
+        (parsed.from?.value?.[0]?.name || '') === 'FluxConvert AI';
+      if (isSelf) continue;
+      if (isOwner && tagOk && passOk) {
         items.push({ uid, messageId: parsed.messageId, subject, from, text, date: parsed.date });
+        // Claim the command so it is not processed twice; unrelated mail is left untouched.
+        if (markSeen) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
       } else {
-        ignored.push({ uid, from, subject, reason: !isOwner ? 'not owner' : isSelf ? 'own report' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
-      }
-      if (markSeen) {
-        // Only claim owner commands and self-reports; leave unrelated mail untouched.
-        if (isOwner || isSelf) await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+        ignored.push({ uid, from, subject, reason: !isOwner ? 'not owner' : !tagOk ? 'missing subject tag' : 'missing passphrase' });
       }
     }
   } finally {
