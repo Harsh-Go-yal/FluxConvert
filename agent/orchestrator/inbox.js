@@ -49,14 +49,22 @@ function parseCommand(item) {
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
-  const first = (lines[0] || '').toLowerCase().replace(/[.!]+$/, '');
-  const rest = lines.slice(1).join('\n');
-  const word = first.split(/\s+/)[0];
-  if (['status', 'roadmap', 'pause', 'resume', 'merge', 'run', 'help'].includes(word) && first.length < 40) {
-    return { cmd: word, arg: rest || first.slice(word.length).trim(), text: source };
+  const first = (lines[0] || '').toLowerCase();
+  const rest = lines
+    .slice(1)
+    .filter((l) => !/^(sent from my|get outlook for|--)/i.test(l)) // phone signatures
+    .join('\n');
+  // Tolerate punctuation / emoji / stray characters around a bare command word: "Status?", "✅ merge", "run!!"
+  const word = (first.match(/[a-z]+/g) || [])[0] || '';
+  const bare = first.replace(/[^a-z]/g, '') === word; // the line is *only* that word (plus junk)
+  if (['status', 'roadmap', 'pause', 'resume', 'merge', 'run', 'help'].includes(word) && (bare || first.length < 40)) {
+    return { cmd: word, arg: rest, text: source };
   }
-  if (word === 'add' || word === 'idea' || word === 'todo') return { cmd: 'add', arg: source.replace(/^\s*(add|idea|todo)\s*:?\s*/i, ''), text: source };
-  if (word === 'approve' || first.startsWith('merge')) return { cmd: 'merge', arg: '', text: source };
+  if (word === 'add' || word === 'idea' || word === 'todo') return { cmd: 'add', arg: source.replace(/^\s*\W*(add|idea|todo)\s*:?\s*/i, ''), text: source };
+  if (word === 'approve' || word === 'merge' || word === 'ship') return { cmd: 'merge', arg: '', text: source };
+  if (['ok', 'okay', 'yes', 'thanks', 'thank', 'hi', 'hello', 'test'].includes(word) && first.length < 25) return { cmd: 'help', arg: '', text: source };
+  // Too short to be a real instruction — answer with help instead of spending a session on it.
+  if (source.replace(/\s+/g, ' ').length < 15) return { cmd: 'help', arg: '', text: source };
   return { cmd: 'instruct', arg: source, text: source };
 }
 
