@@ -5,6 +5,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import ClientFileUploader from "@/components/client-file-uploader";
+import { getToolContent } from "@/content/tool-content";
+import { ToolJsonLd } from "@/components/seo/structured-data";
+import { absoluteUrl, siteConfig } from "@/lib/site-config";
 
 interface Props {
     params: Promise<{ tool: string }>;
@@ -20,9 +23,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         };
     }
 
+    const content = getToolContent(tool.id, tool.title, tool.description);
+
     return {
-        title: `${tool.title} - PDF Solutions`,
-        description: tool.description,
+        title: content.metaTitle,
+        description: content.metaDescription,
+        keywords: [tool.title.toLowerCase(), ...(content.keywords ?? [])],
+        // A canonical URL per tool stops the 31 tool pages from being read as
+        // variations of one another.
+        alternates: { canonical: tool.href },
+        openGraph: {
+            type: 'website',
+            url: absoluteUrl(tool.href),
+            title: content.metaTitle,
+            description: content.metaDescription,
+            siteName: siteConfig.name,
+        },
+        twitter: {
+            card: 'summary_large_image',
+            title: content.metaTitle,
+            description: content.metaDescription,
+        },
     };
 }
 
@@ -40,8 +61,22 @@ export default async function ToolPage({ params }: Props) {
         notFound();
     }
 
+    const content = getToolContent(tool.id, tool.title, tool.description);
+    const relatedTools = content.related
+        .map((id) => tools.find((candidate) => candidate.id === id))
+        .filter((candidate): candidate is (typeof tools)[number] => Boolean(candidate) && candidate!.id !== tool.id)
+        .slice(0, 4);
+
     return (
         <main className="min-h-screen bg-background text-foreground overflow-hidden relative selection:bg-primary/20">
+            <ToolJsonLd
+                name={tool.title}
+                description={content.metaDescription}
+                href={tool.href}
+                category={tool.category}
+                steps={content.steps}
+                faqs={content.faqs}
+            />
             {/* Background Gradients */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
@@ -102,65 +137,122 @@ export default async function ToolPage({ params }: Props) {
                     </div>
                 </div>
 
-                {/* How to Use Section */}
-                <div className="max-w-5xl mx-auto mb-24">
-                    <h2 className="text-3xl font-bold text-center mb-12">How to {tool.title}</h2>
-                    <div className="grid md:grid-cols-3 gap-8">
-                        <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
-                            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">1</div>
-                            <h3 className="text-lg font-semibold mb-2">Upload your files</h3>
-                            <p className="text-muted-foreground">Drag and drop your files into the box above or click to select them.</p>
-                        </div>
-                        <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
-                            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">2</div>
-                            <h3 className="text-lg font-semibold mb-2">Process</h3>
-                            <p className="text-muted-foreground">PDF Solutions will automatically process your files with our advanced engine.</p>
-                        </div>
-                        <div className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
-                            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">3</div>
-                            <h3 className="text-lg font-semibold mb-2">Download</h3>
-                            <p className="text-muted-foreground">Get your converted files instantly. Secure, fast, and high quality.</p>
-                        </div>
-                    </div>
-                </div>
+                {/* How to Use — steps written for this specific tool */}
+                <section className="max-w-5xl mx-auto mb-20" aria-labelledby="how-to">
+                    <h2 id="how-to" className="text-3xl font-bold text-center mb-4">
+                        How to {tool.title.toLowerCase()}
+                    </h2>
+                    <p className="text-center text-muted-foreground max-w-2xl mx-auto mb-12">{content.intro}</p>
+                    <ol className="grid md:grid-cols-3 gap-8 list-none p-0">
+                        {content.steps.map((step, index) => (
+                            <li
+                                key={step.title}
+                                id={`step-${index + 1}`}
+                                className="flex flex-col items-center text-center p-6 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/30 transition-colors"
+                            >
+                                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-4 text-xl font-bold">
+                                    {index + 1}
+                                </div>
+                                <h3 className="text-lg font-semibold mb-2">{step.title}</h3>
+                                <p className="text-muted-foreground">{step.detail}</p>
+                            </li>
+                        ))}
+                    </ol>
+                </section>
 
-                {/* Features Section */}
-                <div className="max-w-4xl mx-auto text-center">
-                    <div className="grid md:grid-cols-2 gap-12 text-left">
+                {/* FAQ — also feeds the FAQPage structured data */}
+                {content.faqs.length > 0 && (
+                    <section className="max-w-3xl mx-auto mb-20" aria-labelledby="faq">
+                        <h2 id="faq" className="text-3xl font-bold text-center mb-10">
+                            Frequently asked questions
+                        </h2>
                         <div className="space-y-4">
+                            {content.faqs.map((faq) => (
+                                <details
+                                    key={faq.question}
+                                    className="group rounded-2xl border border-border/50 bg-card/50 p-5 open:border-primary/30"
+                                >
+                                    <summary className="cursor-pointer list-none font-semibold flex items-center justify-between gap-4">
+                                        {faq.question}
+                                        <span className="text-primary transition-transform group-open:rotate-45 text-xl leading-none">
+                                            +
+                                        </span>
+                                    </summary>
+                                    <p className="mt-3 text-muted-foreground leading-relaxed">{faq.answer}</p>
+                                </details>
+                            ))}
+                        </div>
+                    </section>
+                )}
+
+                {/* Why this site — honest, specific claims */}
+                <section className="max-w-4xl mx-auto mb-20">
+                    <div className="grid md:grid-cols-2 gap-10 text-left">
+                        <div className="space-y-3">
                             <h3 className="text-xl font-bold flex items-center gap-2">
-                                <span className="text-green-500">✓</span> Secure Processing
+                                <span className="text-green-500">✓</span> Your files stay on your device
                             </h3>
                             <p className="text-muted-foreground">
-                                Your files are processed locally whenever possible. When cloud processing is needed, files are deleted automatically after 1 hour.
+                                This tool runs in your browser with WebAssembly. Nothing is uploaded, so nothing can
+                                be stored, scanned or leaked. Password protection is the one exception, and its page
+                                says so plainly.
                             </p>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <h3 className="text-xl font-bold flex items-center gap-2">
-                                <span className="text-blue-500">✓</span> High Quality
+                                <span className="text-blue-500">✓</span> No sign-up, no watermark
                             </h3>
                             <p className="text-muted-foreground">
-                                We use advanced algorithms to ensure the highest quality output for all your conversions and edits.
+                                No account, no email, no trial that stamps a logo across your document or caps you at
+                                three files a day.
                             </p>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <h3 className="text-xl font-bold flex items-center gap-2">
-                                <span className="text-purple-500">✓</span> Free & Easy
+                                <span className="text-purple-500">✓</span> Fast, because there is no upload
                             </h3>
                             <p className="text-muted-foreground">
-                                PDF Solutions is 100% free to use. No registration required, no hidden fees, just simple file tools.
+                                Work starts the moment you choose a file. There is no queue, and a large document is
+                                limited by your own device rather than someone else&apos;s server.
                             </p>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             <h3 className="text-xl font-bold flex items-center gap-2">
-                                <span className="text-orange-500">✓</span> Cross Platform
+                                <span className="text-orange-500">✓</span> Works everywhere
                             </h3>
                             <p className="text-muted-foreground">
-                                Works on Windows, Mac, Linux, and mobile devices. All you need is a modern web browser.
+                                Windows, macOS, Linux, Android and iOS — anything with a modern browser. Nothing to
+                                install.
                             </p>
                         </div>
                     </div>
-                </div>
+                </section>
+
+                {/* Related tools — internal links that help people and crawlers */}
+                {relatedTools.length > 0 && (
+                    <section className="max-w-5xl mx-auto" aria-labelledby="related">
+                        <h2 id="related" className="text-2xl font-bold text-center mb-8">
+                            Related tools
+                        </h2>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {relatedTools.map((related) => (
+                                <Link
+                                    key={related.id}
+                                    href={related.href}
+                                    className="flex items-start gap-3 p-4 rounded-2xl bg-card/50 border border-border/50 hover:border-primary/40 transition-colors"
+                                >
+                                    <related.icon className={`w-5 h-5 mt-0.5 shrink-0 ${related.color}`} />
+                                    <span>
+                                        <span className="block font-semibold">{related.title}</span>
+                                        <span className="block text-sm text-muted-foreground line-clamp-2">
+                                            {related.description}
+                                        </span>
+                                    </span>
+                                </Link>
+                            ))}
+                        </div>
+                    </section>
+                )}
             </div>
         </main>
     );

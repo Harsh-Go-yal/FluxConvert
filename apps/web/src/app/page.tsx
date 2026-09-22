@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { tools } from "@/config/tools";
 import { Search, ArrowRight, CheckCircle2, Zap, Shield, Globe } from "lucide-react";
+import { OrganizationJsonLd } from "@/components/seo/structured-data";
 import { useState } from "react";
 
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background text-foreground overflow-hidden relative selection:bg-primary/20">
+      <OrganizationJsonLd />
 
       {/* Background Gradients */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
