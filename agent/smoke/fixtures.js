@@ -13,9 +13,54 @@ function webRequire(name) {
   return require(name);
 }
 
-// 16x16 red PNG and a tiny JPEG (valid, decodable)
-const PNG_B64 =
-  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAHElEQVR4nGP8z4AfMOGVHVUwqmBUwaiCoaQAAJ3WAR/E+HfrAAAAAElFTkSuQmCC';
+// A real PNG encoder: hand-pasted base64 images tend to have subtly wrong CRCs,
+// which browsers reject with "The source image could not be decoded" — a fixture
+// bug that looks exactly like an application bug.
+const zlib = require('zlib');
+
+function crc32(buf) {
+  let crc = ~0;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return ~crc >>> 0;
+}
+
+function chunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+
+/** Opaque RGBA PNG with a simple gradient, so filters and resizing have something to act on. */
+function makePng(width = 64, height = 64) {
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  let offset = 0;
+  for (let y = 0; y < height; y++) {
+    raw[offset++] = 0; // filter: none
+    for (let x = 0; x < width; x++) {
+      raw[offset++] = Math.round((x / (width - 1)) * 255);
+      raw[offset++] = Math.round((y / (height - 1)) * 255);
+      raw[offset++] = 128;
+      raw[offset++] = 255;
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 6;  // colour type: RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 const JPG_B64 =
   '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAAQABABAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
 
@@ -66,7 +111,7 @@ async function create(dir) {
   return {
     pdf: w('sample.pdf', await pdf(3, 'Sample A')),
     pdf2: w('sample-2.pdf', await pdf(2, 'Sample B')),
-    png: w('sample.png', Buffer.from(PNG_B64, 'base64')),
+    png: w('sample.png', makePng()),
     jpg: w('sample.jpg', Buffer.from(JPG_B64, 'base64')),
     xlsx: w('sample.xlsx', xlsx()),
     docx: w('sample.docx', await docx()),

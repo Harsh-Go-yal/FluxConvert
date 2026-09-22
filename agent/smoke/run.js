@@ -27,6 +27,12 @@ const arg = (name) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 
+/** Tools that require drawing or placing something with a pointer. */
+const NEEDS_INTERACTION = ['sign-pdf', 'redact-pdf', 'edit-pdf'];
+
+/** Tools that need the encryption API, which is not running during a smoke test. */
+const NEEDS_SERVER = ['protect-pdf', 'unlock-pdf'];
+
 const MAGIC = {
   pdf: (b) => b.slice(0, 4).toString() === '%PDF',
   zip: (b) => b[0] === 0x50 && b[1] === 0x4b,
@@ -155,12 +161,23 @@ async function testTool(browser, base, tool, files) {
     const passwordInput = page.locator('input[type=password]').first();
     if (await passwordInput.isVisible().catch(() => false)) await passwordInput.fill('smoketest123').catch(() => {});
 
-    const downloadBtn = page.locator('button:has-text("Download")').first();
+    // Scope to the page body: the site header has nav items like "Merge" and
+    // "Compress" that would otherwise match and navigate away mid-test.
+    const main = page.locator('main').first();
+    const scope = (await main.count()) > 0 ? main : page;
+
+    const downloadBtn = scope.locator('button:has-text("Download"), a:has-text("Download PDF")').first();
     // Tool pages use the shared uploader ("Process Locally" / "Upload & Process"); bespoke pages
     // (e.g. /image-to-pdf) use their own verb button.
-    const processBtn = page
-      .locator('button:has-text("Process Locally"), button:has-text("Upload & Process")')
-      .or(page.locator('button', { hasText: /^(convert|merge|split|compress|rotate|apply|generate|create|start|process)/i }))
+    // Tool pages use the shared uploader ("Process Locally" / "Upload & Process");
+    // bespoke pages (e.g. /image-to-pdf) use their own verb button. One
+    // role-based locator handles both and is not thrown off by JSX whitespace.
+    const processBtn = scope
+      .getByRole('button', {
+        // Deliberately specific: a loose word like "start" also matches
+        // unrelated controls such as the scanner's "Start camera" button.
+        name: /(process locally|upload & process|convert to|convert file|merge pdf|generate pdf|apply)/i,
+      })
       .first();
     const errorText = page.locator('text=/^Error:/').first();
     let clicked = false;
@@ -219,6 +236,16 @@ async function main() {
   const results = [];
   console.log(`🧪 smoke-testing ${tools.length} tool(s) against ${base}`);
   for (const t of tools) {
+    if (NEEDS_SERVER.includes(t.id)) {
+      results.push({ id: t.id, href: t.href, status: 'skip', reason: 'needs the encryption API', ms: 0 });
+      console.log(`  ⏭️  ${t.id}: needs the API server`);
+      continue;
+    }
+    if (NEEDS_INTERACTION.includes(t.id)) {
+      results.push({ id: t.id, href: t.href, status: 'skip', reason: 'needs manual drawing/placement', ms: 0 });
+      console.log(`  ⏭️  ${t.id}: needs manual input`);
+      continue;
+    }
     if (t.comingSoon) {
       results.push({ id: t.id, href: t.href, status: 'skip', reason: 'marked coming soon', ms: 0 });
       console.log(`  ⏭️  ${t.id}: coming soon`);

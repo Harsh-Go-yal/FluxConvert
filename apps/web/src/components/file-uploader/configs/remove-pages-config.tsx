@@ -64,6 +64,7 @@ export function RemovePagesConfig({
             <div className="max-w-xs">
                 <Label>Pages to Remove (e.g. 1,3-5)</Label>
                 <Input
+                    id="pages-to-remove"
                     value={pagesToRemove}
                     onChange={(e) => setPagesToRemove(e.target.value)}
                     placeholder="1, 3-5"

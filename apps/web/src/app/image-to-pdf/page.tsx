@@ -85,13 +85,13 @@ export default function ImageToPdfPage() {
         transition={{ duration: 0.4 }}
         className="text-center"
       >
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-primary">
           <Sparkles className="h-3.5 w-3.5" /> Client-Side Fast & Private
         </div>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           Image to PDF Converter
         </h1>
-        <p className="mt-2 text-sm text-white/60">
+        <p className="mt-2 text-sm text-muted-foreground">
           Convert JPG and PNG images into a single PDF document entirely in your browser.
         </p>
       </motion.div>
@@ -107,20 +107,20 @@ export default function ImageToPdfPage() {
 
         {files.length > 1 ? (
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <p className="mb-2 text-xs font-medium text-white/60">Reorder pages:</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Reorder pages:</p>
             <div className="flex flex-wrap gap-2">
               {files.map((f, i) => (
                 <div
                   key={f.id}
-                  className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white"
+                  className="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1 text-xs text-foreground"
                 >
-                  <span className="font-mono text-white/50">{i + 1}.</span>
+                  <span className="font-mono text-muted-foreground">{i + 1}.</span>
                   <span className="max-w-[120px] truncate">{f.file.name}</span>
                   <button
                     type="button"
                     disabled={i === 0}
                     onClick={() => move(f.id, -1)}
-                    className="p-0.5 text-white/60 hover:text-white disabled:opacity-30"
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
                   >
                     <ArrowUp className="h-3 w-3" />
                   </button>
@@ -128,7 +128,7 @@ export default function ImageToPdfPage() {
                     type="button"
                     disabled={i === files.length - 1}
                     onClick={() => move(f.id, 1)}
-                    className="p-0.5 text-white/60 hover:text-white disabled:opacity-30"
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
                   >
                     <ArrowDown className="h-3 w-3" />
                   </button>
@@ -139,7 +139,7 @@ export default function ImageToPdfPage() {
         ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-4">
-          <p className="text-xs text-white/50">
+          <p className="text-xs text-muted-foreground">
             {files.length} {files.length === 1 ? 'image' : 'images'} selected
           </p>
           <div className="flex items-center gap-3">

@@ -5,6 +5,12 @@ import { useDropzone } from "react-dropzone";
 import { determineProcessingMode, ProcessingMode } from "@/lib/file-utils";
 import { PdfService } from '@/services/pdf-service';
 import type { PageNumberPosition, PageNumberFormat } from '@/lib/pdf/page-numbers';
+import type { CropMargins } from '@/lib/pdf/crop';
+import type { PageBox } from '@/lib/pdf/rasterize';
+import type { OrganizePage } from './configs/organize-config';
+import type { SignatureState } from './configs/sign-config';
+import type { TextAnnotation } from './configs/edit-config';
+import type { ScanPage } from './configs/scan-config';
 import { ImageService } from '@/services/image-service';
 import mammoth from 'mammoth';
 import { htmlToPdfBlob, htmlFileToPdf } from '@/lib/html-to-pdf';
@@ -15,6 +21,11 @@ import { FileList } from "./file-list";
 import { ToolSelector } from "./tool-selector";
 import { ActionConfig } from "./action-config";
 import { ProcessingStatus } from "./processing-status";
+
+/** Tools whose options are chosen visually, so they need page previews. */
+const THUMBNAIL_TOOLS = [
+    'remove-pages', 'extract-pages', 'organize-pdf', 'crop-pdf', 'sign-pdf', 'redact-pdf', 'edit-pdf',
+];
 
 export default function FileUploader({ initialAction }: { initialAction?: string }) {
     const [files, setFiles] = useState<File[]>([]);
@@ -45,6 +56,16 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [pagesToExtract, setPagesToExtract] = useState<string>("");
     const [pageNumberPosition, setPageNumberPosition] = useState<PageNumberPosition>("bottom-center");
     const [pageNumberFormat, setPageNumberFormat] = useState<PageNumberFormat>("n");
+    const [organizePages, setOrganizePages] = useState<OrganizePage[]>([]);
+    const [cropMargins, setCropMargins] = useState<CropMargins>({ top: 5, right: 5, bottom: 5, left: 5 });
+    const [cropUnit, setCropUnit] = useState<'percent' | 'mm'>('percent');
+    const [redactBoxes, setRedactBoxes] = useState<PageBox[]>([]);
+    const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
+    const [scanPages, setScanPages] = useState<ScanPage[]>([]);
+    const [scanEnhance, setScanEnhance] = useState(true);
+    const [signature, setSignature] = useState<SignatureState>({
+        dataUrl: '', typedName: '', mode: 'draw', page: 0, x: 0.55, y: 0.75, width: 0.3, includeDate: false,
+    });
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
 
@@ -88,13 +109,17 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Generate thumbnails when a PDF is uploaded and action is remove-pages
     useEffect(() => {
         const generateThumbnails = async () => {
-            if (files.length > 0 && files[0].type === 'application/pdf' && (action === 'remove-pages' || action === 'extract-pages')) {
+            if (files.length > 0 && files[0].type === 'application/pdf' && THUMBNAIL_TOOLS.includes(action)) {
                 console.log("Starting thumbnail generation...");
                 setGeneratingThumbnails(true);
                 setThumbnails([]); // Clear existing
                 try {
                     const thumbs = await PdfService.getThumbnails(files[0]);
                     setThumbnails(thumbs);
+                    // Organize works on a page list, so seed it from what was rendered.
+                    setOrganizePages(
+                        thumbs.map((_, index) => ({ index, rotation: 0, removed: false })),
+                    );
                 } catch (error) {
                     console.error("Error generating thumbnails:", error);
                 } finally {
@@ -102,10 +127,19 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 }
             } else {
                 setThumbnails([]);
+                setOrganizePages([]);
             }
         };
 
         generateThumbnails();
+    }, [files, action]);
+
+    // Visual selections (boxes, signature placement, text) belong to one file and
+    // one tool — carrying them over to another would silently edit the wrong pages.
+    useEffect(() => {
+        setRedactBoxes([]);
+        setTextAnnotations([]);
+        setSignature((current) => ({ ...current, page: 0 }));
     }, [files, action]);
 
     // Clear download URL when action changes
@@ -162,7 +196,11 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Auto-process when files are added if we are on a specific tool page
     useEffect(() => {
         // Don't auto-process for tools that require user input
-        const interactiveTools = ['remove-pages', 'extract-pages', 'add-page-numbers', 'split-pdf', 'protect-pdf', 'unlock-pdf', 'watermark-pdf', 'resize-image', 'compress-image'];
+        const interactiveTools = [
+            'remove-pages', 'extract-pages', 'add-page-numbers', 'split-pdf', 'protect-pdf', 'unlock-pdf',
+            'watermark-pdf', 'resize-image', 'compress-image', 'organize-pdf', 'crop-pdf', 'sign-pdf',
+            'redact-pdf', 'edit-pdf', 'scan-pdf', 'compare-pdf',
+        ];
 
         if (initialAction && files.length > 0 && !downloadUrl && !isProcessing && action === initialAction && mode) {
             if (!interactiveTools.includes(initialAction)) {
@@ -172,7 +210,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     }, [files, initialAction, action, mode]);
 
     const handleProcess = async () => {
-        if (files.length === 0 || !mode || !action) return;
+        // Scan to PDF can run purely from camera captures, so it needs no upload.
+        const cameraOnly = action === 'scan-pdf' && scanPages.length > 0;
+        if (!action || (!cameraOnly && (files.length === 0 || !mode))) return;
 
         setIsProcessing(true);
         setDownloadUrl(null);
@@ -181,10 +221,10 @@ export default function FileUploader({ initialAction }: { initialAction?: string
 
         try {
             let blob: Blob | null = null;
-            let filename = files[0].name.split('.')[0];
+            let filename = files[0]?.name.split('.')[0] ?? 'document';
             let ext = 'txt';
 
-            if (mode === ProcessingMode.LOCAL) {
+            if (mode === ProcessingMode.LOCAL || cameraOnly) {
                 // --- PDF ACTIONS ---
                 if (action === "merge-pdf") {
                     blob = await PdfService.mergePdfs(files);
@@ -255,6 +295,70 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                     blob = await PdfService.pdfToExcel(files[0]);
                     filename = `${filename}_converted`;
                     ext = 'xlsx';
+                } else if (action === "organize-pdf") {
+                    const kept = organizePages.filter((page) => !page.removed);
+                    if (kept.length === 0) throw new Error('Keep at least one page.');
+                    const rotations: Record<number, number> = {};
+                    kept.forEach((page, position) => {
+                        if (page.rotation !== 0) rotations[position] = page.rotation;
+                    });
+                    blob = await PdfService.organizePdf(files[0], kept.map((page) => page.index), rotations);
+                    filename = `${filename}_organized`;
+                    ext = 'pdf';
+                } else if (action === "crop-pdf") {
+                    blob = await PdfService.cropPdf(files[0], cropMargins, { unit: cropUnit });
+                    filename = `${filename}_cropped`;
+                    ext = 'pdf';
+                } else if (action === "redact-pdf") {
+                    blob = await PdfService.redactPdf(files[0], redactBoxes, (percent) =>
+                        setStatusMessage(`Redacting... ${percent}%`),
+                    );
+                    filename = `${filename}_redacted`;
+                    ext = 'pdf';
+                } else if (action === "sign-pdf") {
+                    const placement = { page: signature.page, x: signature.x, y: signature.y, width: signature.width };
+                    const dateLabel = signature.includeDate ? new Date().toLocaleDateString() : undefined;
+                    if (signature.mode === 'draw') {
+                        if (!signature.dataUrl) throw new Error('Draw your signature first.');
+                        const image = await (await fetch(signature.dataUrl)).blob();
+                        blob = await PdfService.signPdf(files[0], { type: 'image', image, placement, dateLabel });
+                    } else {
+                        blob = await PdfService.signPdf(files[0], {
+                            type: 'text', text: signature.typedName, font: 'Times-Italic', placement, dateLabel,
+                        });
+                    }
+                    filename = `${filename}_signed`;
+                    ext = 'pdf';
+                } else if (action === "edit-pdf") {
+                    blob = await PdfService.editPdf(files[0], textAnnotations);
+                    filename = `${filename}_edited`;
+                    ext = 'pdf';
+                } else if (action === "compare-pdf") {
+                    if (files.length < 2) throw new Error('Add two PDFs to compare.');
+                    const { blob: report, result } = await PdfService.comparePdfs(files[0], files[1]);
+                    blob = report;
+                    setStatusMessage(
+                        result.identical ? 'The text is identical.' : `${result.changedPages} page(s) differ.`,
+                    );
+                    filename = 'comparison';
+                    ext = 'html';
+                } else if (action === "scan-pdf") {
+                    const sources = scanPages.length > 0 ? scanPages.map((page) => page.blob) : files;
+                    blob = await PdfService.scanToPdf(sources, scanEnhance);
+                    filename = 'scan';
+                    ext = 'pdf';
+                } else if (action === "pdf-to-powerpoint") {
+                    blob = await PdfService.pdfToPowerPoint(files[0], (percent) =>
+                        setStatusMessage(`Building slides... ${percent}%`),
+                    );
+                    filename = `${filename}_slides`;
+                    ext = 'pptx';
+                } else if (action === "pdf-to-pdfa") {
+                    blob = await PdfService.archivePdf(files[0], (percent) =>
+                        setStatusMessage(`Flattening... ${percent}%`),
+                    );
+                    filename = `${filename}_archive`;
+                    ext = 'pdf';
                 } else if (action === "excel-to-pdf") {
                     blob = await PdfService.excelToPdf(files[0]);
                     filename = `${filename}_converted`;
@@ -408,7 +512,8 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 )}
             </div>
 
-            {files.length > 0 && (
+            {/* Scan to PDF shows its camera panel before anything is uploaded. */}
+            {(files.length > 0 || action === 'scan-pdf') && (
                 <div className="mt-8 space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                     <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold text-foreground">Convert or Download</h3>
@@ -452,6 +557,22 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         setPageNumberPosition={setPageNumberPosition}
                         pageNumberFormat={pageNumberFormat}
                         setPageNumberFormat={setPageNumberFormat}
+                        organizePages={organizePages}
+                        setOrganizePages={setOrganizePages}
+                        cropMargins={cropMargins}
+                        setCropMargins={setCropMargins}
+                        cropUnit={cropUnit}
+                        setCropUnit={setCropUnit}
+                        redactBoxes={redactBoxes}
+                        setRedactBoxes={setRedactBoxes}
+                        signature={signature}
+                        setSignature={setSignature}
+                        textAnnotations={textAnnotations}
+                        setTextAnnotations={setTextAnnotations}
+                        scanPages={scanPages}
+                        setScanPages={setScanPages}
+                        scanEnhance={scanEnhance}
+                        setScanEnhance={setScanEnhance}
                         thumbnails={thumbnails}
                         generatingThumbnails={generatingThumbnails}
                         compressionMode={compressionMode}

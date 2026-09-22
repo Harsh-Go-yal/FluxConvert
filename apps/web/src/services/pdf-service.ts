@@ -23,6 +23,11 @@ import { addPageNumbers, type PageNumberOptions } from '../lib/pdf/page-numbers'
 import { parsePageRanges } from '../lib/pdf/ranges';
 import { renderPdfPageThumbnails } from '../lib/pdf/thumbnails';
 import { pdfToImages as pdfToImagesLib, type ImageFormat } from '../lib/pdf-to-image';
+import { cropPdf as cropPdfLib, type CropMargins, type CropOptions } from '../lib/pdf/crop';
+import { rasterizePages, pdfFromImages, flattenPdf, type PageBox } from '../lib/pdf/rasterize';
+import { signPdf as signPdfLib, type SignOptions } from '../lib/pdf/sign';
+import { comparePdfs as comparePdfsLib, comparisonToHtml, type CompareResult } from '../lib/pdf/compare';
+import { pdfToPptx as pdfToPptxLib } from '../lib/pdf-to-pptx';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || '/api/pdf';
 
@@ -55,6 +60,46 @@ async function indicesFrom(file: File | Blob, input: string): Promise<number[]> 
     if (error) throw new Error(error);
     if (indices.length === 0) throw new Error('No pages selected.');
     return indices;
+}
+
+/**
+ * Make a phone photo look like a scan: grayscale, then stretch contrast so the
+ * paper goes white and the ink goes black.
+ */
+async function enhanceScan(source: File | Blob): Promise<Blob> {
+    if (typeof document === 'undefined') return source;
+    const bitmap = await createImageBitmap(source);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) return source;
+
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+
+    let min = 255;
+    let max = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        data[i] = data[i + 1] = data[i + 2] = luma;
+        if (luma < min) min = luma;
+        if (luma > max) max = luma;
+    }
+    const span = Math.max(1, max - min);
+    for (let i = 0; i < data.length; i += 4) {
+        // Pull the darkest 15% to black and the lightest 15% to white.
+        const stretched = ((data[i] - min) / span) * 255;
+        const value = Math.min(255, Math.max(0, (stretched - 38) * 1.42));
+        data[i] = data[i + 1] = data[i + 2] = value;
+    }
+    context.putImageData(image, 0, 0);
+
+    return new Promise((resolve) =>
+        canvas.toBlob((blob) => resolve(blob ?? source), 'image/jpeg', 0.9),
+    );
 }
 
 async function postToApi(path: string, file: File, password: string): Promise<Blob> {
@@ -129,6 +174,9 @@ export class PdfService {
     }
 
     static async removePages(file: File, pagesToRemove: string): Promise<Blob> {
+        // An empty selection means "all pages" to the range parser, which would
+        // quietly try to delete the entire document. Ask for a selection instead.
+        if (!pagesToRemove?.trim()) throw new Error('Choose which pages to remove.');
         const indices = await indicesFrom(file, pagesToRemove);
         const { bytes } = await deletePdfPages(file, indices);
         return toPdfBlob(bytes);
@@ -140,9 +188,21 @@ export class PdfService {
         return toPdfBlob(bytes);
     }
 
-    static async organizePdf(file: File, order: number[]): Promise<Blob> {
+    /**
+     * Reorder pages, optionally rotating some of them. `order` lists the original
+     * zero-based page indices in their new order (pages left out are dropped);
+     * `rotations` is keyed by position in that new order.
+     */
+    static async organizePdf(
+        file: File,
+        order: number[],
+        rotations: Record<number, number> = {},
+    ): Promise<Blob> {
+        if (!order.length) throw new Error('Keep at least one page.');
         const { bytes } = await reorderPdfPages(file, order);
-        return toPdfBlob(bytes);
+        if (Object.keys(rotations).length === 0) return toPdfBlob(bytes);
+        const { bytes: rotated } = await rotatePdfPages(bytes, rotations);
+        return toPdfBlob(rotated);
     }
 
     /** Rotate every page by `angle` degrees (default a quarter turn clockwise). */
@@ -366,6 +426,113 @@ export class PdfService {
             }
         }
         if (doc.getPageCount() === 0) throw new Error('This spreadsheet has no readable sheets.');
+        return toPdfBlob(await doc.save());
+    }
+
+    /** Trim margins from every page. */
+    static async cropPdf(file: File, margins: CropMargins, options: CropOptions = {}): Promise<Blob> {
+        const { bytes } = await cropPdfLib(file, margins, options);
+        return toPdfBlob(bytes);
+    }
+
+    /**
+     * Redact by rendering each page to an image with the selected areas painted
+     * over, then rebuilding the PDF. The covered text is genuinely removed —
+     * drawing black rectangles on top of a text layer only hides it.
+     */
+    static async redactPdf(
+        file: File,
+        boxes: PageBox[],
+        onProgress?: (percent: number) => void,
+    ): Promise<Blob> {
+        if (!boxes.length) throw new Error('Draw at least one area to redact.');
+        const scale = 2;
+        const pages = await rasterizePages(file, {
+            scale,
+            boxes,
+            format: 'image/png', // lossless, so redacted edges stay crisp
+            onProgress: (percent) => onProgress?.(percent),
+        });
+        return toPdfBlob(await pdfFromImages(pages, scale));
+    }
+
+    /** Stamp a visible signature (drawn or typed). Not a cryptographic signature. */
+    static async signPdf(file: File, options: SignOptions): Promise<Blob> {
+        const { bytes } = await signPdfLib(file, options);
+        return toPdfBlob(bytes);
+    }
+
+    /** Add text on top of pages at chosen positions. */
+    static async editPdf(
+        file: File,
+        annotations: { page: number; x: number; y: number; text: string; size?: number; color?: { r: number; g: number; b: number } }[],
+    ): Promise<Blob> {
+        if (!annotations.length) throw new Error('Add at least one text box.');
+        const { StandardFonts, rgb } = await import('pdf-lib');
+        const doc = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+        const font = await doc.embedFont(StandardFonts.Helvetica);
+        const pages = doc.getPages();
+
+        for (const note of annotations) {
+            const page = pages[Math.min(Math.max(0, note.page), pages.length - 1)];
+            if (!page) continue;
+            const { width, height } = page.getSize();
+            const size = note.size ?? 14;
+            const color = note.color ?? { r: 0, g: 0, b: 0 };
+            // Positions arrive as top-left fractions; PDF measures from the bottom.
+            page.drawText(note.text, {
+                x: note.x * width,
+                y: height - note.y * height - size,
+                size,
+                font,
+                color: rgb(color.r, color.g, color.b),
+                maxWidth: width - note.x * width - 20,
+            });
+        }
+        return toPdfBlob(await doc.save());
+    }
+
+    /** Compare two PDFs and return a self-contained HTML report. */
+    static async comparePdfs(fileA: File, fileB: File): Promise<{ blob: Blob; result: CompareResult }> {
+        const result = await comparePdfsLib(fileA, fileB);
+        const html = comparisonToHtml(result, fileA.name, fileB.name);
+        return { blob: new Blob([html], { type: 'text/html;charset=utf-8' }), result };
+    }
+
+    /** One slide per page, as a .pptx. */
+    static async pdfToPowerPoint(file: File, onProgress?: (percent: number) => void): Promise<Blob> {
+        return pdfToPptxLib(file, { onProgress: (percent) => onProgress?.(percent) });
+    }
+
+    /**
+     * Flatten for archiving: pages become images, so fonts, forms and layers can
+     * never render differently later. This is a self-contained archival PDF, not
+     * a certified PDF/A file — real PDF/A conformance needs an embedded colour
+     * profile and validation the browser cannot do. The UI says so.
+     */
+    static async archivePdf(file: File, onProgress?: (percent: number) => void): Promise<Blob> {
+        const bytes = await flattenPdf(file, {
+            scale: 2,
+            format: 'image/jpeg',
+            quality: 0.92,
+            onProgress: (percent) => onProgress?.(percent),
+        });
+        return toPdfBlob(bytes);
+    }
+
+    /** Photos of a document -> a clean, high-contrast PDF. */
+    static async scanToPdf(images: (File | Blob)[], enhance = true): Promise<Blob> {
+        if (!images.length) throw new Error('Capture or select at least one page.');
+        const doc = await PDFDocument.create();
+
+        for (const image of images) {
+            const processed = enhance ? await enhanceScan(image) : image;
+            const bytes = new Uint8Array(await processed.arrayBuffer());
+            const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+            const embedded = isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+            const page = doc.addPage([embedded.width, embedded.height]);
+            page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
+        }
         return toPdfBlob(await doc.save());
     }
 

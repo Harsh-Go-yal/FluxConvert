@@ -77,8 +77,7 @@ export const tools: Tool[] = [
         icon: Layers,
         category: "PDF",
         href: "/organize-pdf",
-        color: "text-red-500",
-        comingSoon: true
+        color: "text-red-500"
     },
     {
         id: "scan-pdf",
@@ -87,8 +86,7 @@ export const tools: Tool[] = [
         icon: FileImage,
         category: "PDF",
         href: "/scan-pdf",
-        color: "text-red-500",
-        comingSoon: true
+        color: "text-red-500"
     },
 
     // Optimize PDF
@@ -193,8 +191,7 @@ export const tools: Tool[] = [
         icon: FileSpreadsheet,
         category: "Convert",
         href: "/pdf-to-powerpoint",
-        color: "text-orange-500",
-        comingSoon: true
+        color: "text-orange-500"
     },
     {
         id: "pdf-to-excel",
@@ -212,8 +209,7 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "Convert",
         href: "/pdf-to-pdfa",
-        color: "text-red-700",
-        comingSoon: true
+        color: "text-red-700"
     },
 
     // Edit PDF
@@ -251,8 +247,7 @@ export const tools: Tool[] = [
         icon: Scissors,
         category: "PDF",
         href: "/crop-pdf",
-        color: "text-red-500",
-        comingSoon: true
+        color: "text-red-500"
     },
     {
         id: "edit-pdf",
@@ -261,8 +256,7 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "PDF",
         href: "/edit-pdf",
-        color: "text-red-500",
-        comingSoon: true
+        color: "text-red-500"
     },
 
     // PDF Security
@@ -291,8 +285,7 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "Security",
         href: "/sign-pdf",
-        color: "text-blue-600",
-        comingSoon: true
+        color: "text-blue-600"
     },
     {
         id: "redact-pdf",
@@ -301,8 +294,7 @@ export const tools: Tool[] = [
         icon: Shield,
         category: "Security",
         href: "/redact-pdf",
-        color: "text-black",
-        comingSoon: true
+        color: "text-black"
     },
     {
         id: "compare-pdf",
@@ -311,8 +303,7 @@ export const tools: Tool[] = [
         icon: Layers,
         category: "PDF",
         href: "/compare-pdf",
-        color: "text-red-500",
-        comingSoon: true
+        color: "text-red-500"
     },
 
     // Image Tools (kept for completeness)
