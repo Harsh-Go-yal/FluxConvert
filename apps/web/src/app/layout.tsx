@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { ClerkProvider } from "@clerk/nextjs";
+import { isAuthConfigured } from "@/lib/auth-config";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { Header } from "@/components/header";
@@ -28,8 +29,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <ClerkProvider>
+  const page = (
       <html lang="en" suppressHydrationWarning>
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -48,6 +48,9 @@ export default function RootLayout({
           </ThemeProvider>
         </body>
       </html>
-    </ClerkProvider>
   );
+
+  // Mounting ClerkProvider without a publishable key throws while prerendering,
+  // which fails the whole build. Sign-in is simply unavailable in that case.
+  return isAuthConfigured ? <ClerkProvider>{page}</ClerkProvider> : page;
 }

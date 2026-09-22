@@ -26,6 +26,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { isAuthConfigured } from "@/lib/auth-config";
 
 // ... (imports remain the same, remove unused ones if any)
 
@@ -138,20 +139,22 @@ export function Header() {
                             <ThemeToggle />
                         </div>
 
-                        {/* Auth Buttons */}
-                        <div className="flex items-center gap-2">
-                            <SignedOut>
-                                <SignInButton mode="modal">
-                                    <Button variant="ghost" size="sm">Log in</Button>
-                                </SignInButton>
-                                <SignUpButton mode="modal">
-                                    <Button size="sm">Sign up</Button>
-                                </SignUpButton>
-                            </SignedOut>
-                            <SignedIn>
-                                <UserButton afterSignOutUrl="/" />
-                            </SignedIn>
-                        </div>
+                        {/* Auth Buttons — Clerk components only render when auth is configured */}
+                        {isAuthConfigured && (
+                            <div className="flex items-center gap-2">
+                                <SignedOut>
+                                    <SignInButton mode="modal">
+                                        <Button variant="ghost" size="sm">Log in</Button>
+                                    </SignInButton>
+                                    <SignUpButton mode="modal">
+                                        <Button size="sm">Sign up</Button>
+                                    </SignUpButton>
+                                </SignedOut>
+                                <SignedIn>
+                                    <UserButton afterSignOutUrl="/" />
+                                </SignedIn>
+                            </div>
+                        )}
 
                         {/* Mobile Menu Toggle */}
                         <div className="lg:hidden">
@@ -185,11 +188,13 @@ export function Header() {
                             <Button className="w-full bg-primary/10 text-primary hover:bg-primary/20 border-0">
                                 <Sparkles className="w-4 h-4 mr-2" /> Go Pro
                             </Button>
-                            <SignedOut>
-                                <SignInButton mode="modal">
-                                    <Button className="w-full">Log in</Button>
-                                </SignInButton>
-                            </SignedOut>
+                            {isAuthConfigured && (
+                                <SignedOut>
+                                    <SignInButton mode="modal">
+                                        <Button className="w-full">Log in</Button>
+                                    </SignInButton>
+                                </SignedOut>
+                            )}
                         </div>
                     </div>
                 )}
