@@ -17,7 +17,8 @@ You must produce a JSON plan of small, independently shippable tasks. Hard rules
 1. A task is DONE only when the result is reachable by a user in the UI. Utilities without a UI entry point are NOT tasks. If an existing utility is orphaned (listed below), the task is to WIRE it in, not to write another one.
 2. Each task must be finishable by one coding run (about 5-10 minutes, at most 4 files edited). Prefer editing existing files over creating new ones. Reuse apps/web/src/lib/pdf/* helpers; never duplicate them.
 3. Order: (a) the owner's instruction if given, (b) TypeScript errors, (c) tools registered in tools.ts but not handled by the uploader dispatch, (d) orphan modules to wire in, (e) roadmap items, (f) UX polish.
-4. Never plan work in agent/, .github/, .env*, node_modules, apps/api or python services. Frontend only unless the owner explicitly asks.
+4. Never plan work in agent/, .github/, .env*, node_modules, apps/api or python services. Frontend only unless the owner explicitly asks. You cannot compile Rust/WASM (packages/wasm is prebuilt and its PDF code is an unfinished stub): when a failure comes from the WASM worker, the fix is to route that operation through the pdf-lib TypeScript helpers in apps/web/src/lib/pdf/ instead of the worker — never edit .rs files.
+4b. Smoke-test failures map to known causes: "Unknown action: X" = the web worker has no such action; "No output generated." = the uploader dispatch (file-uploader/index.tsx) has no branch for that tool id; "Failed to get catalog" or a tiny invalid output = the WASM implementation is a stub; "Failed to fetch" = it calls the cloud API, which is unavailable in CI, so prefer a client-side pdf-lib path.
 5. Do not repeat anything marked done in history or roadmap. Do not re-plan a task that was discarded in the last 2 sessions unless you change the approach and say why.
 6. "prompt" must be a precise brief for the coder: what to build, exact files, existing symbols to reuse (from the tree), how it is wired into the UI, and edge cases. The coder cannot see this plan, only the prompt.
 
@@ -45,13 +46,25 @@ function historyDigest(entries) {
     .join('\n');
 }
 
-async function plan({ instruction, tsc, maxTasks }) {
+async function plan({ instruction, tsc, smoke, buildError, maxTasks }) {
   const orphans = ctx.orphanModules();
   const coverage = ctx.toolCoverage();
   const sections = [];
   if (instruction) sections.push(`## Owner instruction (highest priority — plan this first)\n${instruction}`);
   sections.push(`## Session budget\nUp to ${maxTasks} tasks, ${cfg.SESSION_MINUTES} minutes of coding total.`);
   sections.push(`## TypeScript status\n${tsc.ok ? 'clean' : tsc.errors.slice(0, 20).join('\n')}`);
+  if (buildError) sections.push(`## Production build is FAILING (fix this first)\n\`\`\`\n${buildError.slice(-1500)}\n\`\`\``);
+  if (smoke && !smoke.skipped && (smoke.results || []).length) {
+    const broken = smoke.results.filter((r) => r.status === 'fail');
+    const working = smoke.results.filter((r) => r.status === 'pass').map((r) => r.id);
+    sections.push(
+      `## Browser smoke test (each tool page: upload a sample file, run it, expect a valid download)\n` +
+        `Working (${working.length}): ${working.join(', ') || 'none'}\n` +
+        `Broken (${broken.length}):\n${broken.map((r) => `- ${r.id}: ${r.reason}`).join('\n')}\n\n` +
+        `These are REAL user-facing failures, verified in a browser, and fixing them is the highest-value work after a failing build. ` +
+        `Group tools that fail for the same root cause into ONE task. A task is done only when that tool would pass the smoke test.`
+    );
+  }
   if (coverage) {
     sections.push(
       `## Tool registry coverage\n${coverage.handled.length}/${coverage.total} tools in src/config/tools.ts are handled in file-uploader/index.tsx.\nNot handled: ${coverage.missing.join(', ') || 'none'}`

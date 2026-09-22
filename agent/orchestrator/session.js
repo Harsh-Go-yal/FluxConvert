@@ -119,10 +119,25 @@ async function main() {
   const tsc0 = ctx.typecheck();
   log(tsc0.ok ? '   clean' : `   ${tsc0.errors.length} error(s)`);
 
+  // Baseline: build + smoke-test every tool so the planner knows what is actually broken.
+  let smoke0 = { skipped: true, results: [], byId: {} };
+  if (tsc0.ok) {
+    log('🔨 Baseline build + 🧪 smoke test…');
+    const b0 = ctx.build();
+    if (b0.ok) {
+      smoke0 = ctx.smoke();
+      log(smoke0.skipped ? '   smoke skipped' : smoke0.ok ? `   ${smoke0.pass} working, ${smoke0.fail} broken` : `   smoke runner error: ${smoke0.error}`);
+    } else {
+      log('   baseline build failed — planner will see the build error');
+      result.baselineBuildError = b0.out.slice(-2000);
+    }
+  }
+  result.smokeBefore = smoke0.skipped ? null : { pass: smoke0.pass, fail: smoke0.fail };
+
   log('🧠 Planning…');
   let plan;
   try {
-    plan = await planner.plan({ instruction: cfg.INSTRUCTION, tsc: tsc0, maxTasks: cfg.MAX_TASKS });
+    plan = await planner.plan({ instruction: cfg.INSTRUCTION, tsc: tsc0, smoke: smoke0, buildError: result.baselineBuildError, maxTasks: cfg.MAX_TASKS });
   } catch (err) {
     log(`   planner failed: ${err.message}`);
     plan = { tasks: [], notes: `Planner failed: ${err.message}` };
@@ -252,6 +267,57 @@ async function main() {
       result.build.out = b.out;
     }
     log(result.build.ok ? '   ✅ build passed' : '   ❌ build still failing (no code will be delivered)');
+
+    // ── 4b. Smoke gate: no tool that worked before may be broken now ────────
+    if (result.build.ok && committed().length > 0 && !smoke0.skipped) {
+      log('🧪 Smoke test after changes…');
+      let s1 = ctx.smoke();
+      const regressions = () =>
+        s1.results.filter((r) => r.status === 'fail' && smoke0.byId[r.id]?.status === 'pass').map((r) => `${r.id}: ${r.reason}`);
+      let regs = regressions();
+      if (regs.length) {
+        log(`   ⚠️ ${regs.length} regression(s): ${regs.map((r) => r.split(':')[0]).join(', ')} — one repair attempt`);
+        const cp = git.head();
+        await runAider({
+          message: `# Regression: tools that worked before this session now fail the browser smoke test\n\n${regs.map((r) => `- ${r}`).join('\n')}\n\nThe smoke test uploads a small sample file on each tool page and expects a valid download. Find what this session's changes broke (see git diff of the last commits) and fix it with minimal edits. Do not remove features.`,
+          files: [...sessionFiles],
+          readFiles: [],
+          timeoutMs: 8 * 60 * 1000,
+          logName: 'smoke-repair',
+        });
+        revertProtected();
+        if (git.isDirty() && ctx.typecheck().ok && ctx.build().ok) {
+          git.commit(`fix(ai): repair tool regressions\n\nAI-Session: ${result.date}`);
+          const partial = ctx.smoke(regs.map((r) => r.split(':')[0])); // re-test only the regressed tools
+          const merged = s1.results.map((r) => partial.byId[r.id] || r);
+          s1 = { ...s1, results: merged, pass: merged.filter((r) => r.status === 'pass').length, fail: merged.filter((r) => r.status === 'fail').length };
+          regs = regressions();
+          if (regs.length) git.hardReset(cp);
+        } else if (git.isDirty()) {
+          git.hardReset(cp);
+        }
+        while (regs.length && committed().length > 0) {
+          const last = committed()[committed().length - 1];
+          log(`   🗑️  dropping "${last.title}" (regression) and re-testing`);
+          git.hardReset(last.checkpoint);
+          last.status = 'discarded';
+          last.reason = `dropped: broke ${regs.map((r) => r.split(':')[0]).join(', ')}`;
+          result.build.droppedTasks.push(last.title);
+          if (committed().length === 0) break;
+          if (!ctx.build().ok) continue;
+          s1 = ctx.smoke();
+          regs = regressions();
+        }
+      }
+      result.smokeAfter = { pass: s1.pass, fail: s1.fail, regressions: regs.map((r) => r.split(':')[0]) };
+      result.smokeFixed = s1.results.filter((r) => r.status === 'pass' && smoke0.byId[r.id]?.status === 'fail').map((r) => r.id);
+      result.smokeBroken = s1.results.filter((r) => r.status === 'fail').map((r) => ({ id: r.id, reason: r.reason }));
+      log(`   ${s1.pass} working, ${s1.fail} broken${result.smokeFixed.length ? `, fixed: ${result.smokeFixed.join(', ')}` : ''}${regs.length ? `, REGRESSED: ${regs.join('; ')}` : ''}`);
+    } else if (!smoke0.skipped) {
+      result.smokeBroken = smoke0.results.filter((r) => r.status === 'fail').map((r) => ({ id: r.id, reason: r.reason }));
+    }
+  } else if (!smoke0.skipped) {
+    result.smokeBroken = smoke0.results.filter((r) => r.status === 'fail').map((r) => ({ id: r.id, reason: r.reason }));
   }
 
   // ── 5. Wrap-up: roadmap / memory / changelog / history ───────────────────

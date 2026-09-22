@@ -26,6 +26,12 @@ function markdown(r) {
   L.push(`| Tasks | ${r.tasks.filter((t) => t.status === 'committed').length} shipped / ${r.tasks.length} planned |`);
   L.push(`| Coding time | ${r.codingMinutes} min of ${cfg.SESSION_MINUTES} |`);
   L.push(`| Build gate | ${r.build.skipped ? 'skipped (no changes)' : r.build.ok ? '✅ passed' : '❌ failed'} |`);
+  if (r.smokeBefore) {
+    const after = r.smokeAfter ? `${r.smokeAfter.pass} working / ${r.smokeAfter.fail} broken` : 'not re-run';
+    L.push(`| Tools (browser test) | before: ${r.smokeBefore.pass} working / ${r.smokeBefore.fail} broken → after: ${after} |`);
+  }
+  if (r.smokeFixed?.length) L.push(`| 🎉 Now working | ${r.smokeFixed.join(', ')} |`);
+  if (r.smokeAfter?.regressions?.length) L.push(`| ⚠️ Regressed | ${r.smokeAfter.regressions.join(', ')} |`);
   L.push(`| Delivery | ${r.delivery.text} |`);
   L.push(`| Tokens | ${k(r.usage.sent)} sent / ${k(r.usage.received)} received (planner ${k(r.usage.plannerPrompt)}/${k(r.usage.plannerCompletion)}) |`);
   L.push(`| Est. cost | ${money(r.usage.usd)} |`);
@@ -47,6 +53,11 @@ function markdown(r) {
   if (r.build.repaired) L.push(`> 🔧 The final build initially failed and was repaired automatically.\n`);
   if (r.build.droppedTasks?.length) L.push(`> 🗑️ Dropped to make the build pass: ${r.build.droppedTasks.join(', ')}\n`);
   if (!r.build.ok && !r.build.skipped) L.push('```\n' + r.build.out.slice(-1500) + '\n```\n');
+  if (r.smokeBroken?.length) {
+    L.push('## Tools still broken');
+    r.smokeBroken.forEach((t) => L.push(`- \`${t.id}\` — ${t.reason}`));
+    L.push('');
+  }
   if (r.plannerNotes) L.push(`## Planner notes\n${r.plannerNotes}\n`);
   if (r.roadmapNext?.length) {
     L.push('## Up next');
@@ -85,6 +96,7 @@ ${r.instruction ? `<div style="background:#f5f7ff;border-left:4px solid #4f6bed;
 ${r.conflict ? `<div style="background:#fff7e6;border-left:4px solid #f0a500;padding:10px 12px;margin-bottom:16px">⚠️ <code>${esc(r.branch)}</code> conflicted with main. Previous AI work was saved to <code>${esc(r.backupBranch)}</code> and the branch restarted from main.</div>` : ''}
 <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:16px">
 <tr><td style="padding:4px 8px;color:#666">Build gate</td><td style="padding:4px 8px">${buildLine}</td></tr>
+${r.smokeBefore ? `<tr><td style="padding:4px 8px;color:#666">Tools working</td><td style="padding:4px 8px">${r.smokeBefore.pass} → ${r.smokeAfter ? r.smokeAfter.pass : '?'} of ${r.smokeBefore.pass + r.smokeBefore.fail}${r.smokeFixed?.length ? ` (fixed: ${esc(r.smokeFixed.join(', '))})` : ''}</td></tr>` : ''}
 <tr><td style="padding:4px 8px;color:#666">Delivery</td><td style="padding:4px 8px">${r.delivery.html}</td></tr>
 <tr><td style="padding:4px 8px;color:#666">Coding time</td><td style="padding:4px 8px">${r.codingMinutes} min of ${cfg.SESSION_MINUTES}</td></tr>
 <tr><td style="padding:4px 8px;color:#666">Tokens / cost</td><td style="padding:4px 8px">${k(r.usage.sent)} sent, ${k(r.usage.received)} received · ≈ ${money(r.usage.usd)}</td></tr>

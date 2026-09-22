@@ -12,7 +12,8 @@
   "dependencies": {
     "imapflow": "^1.0.164",
     "mailparser": "^3.7.1",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "playwright": "^1.63.0"
   },
   "engines": {
     "node": ">=20"

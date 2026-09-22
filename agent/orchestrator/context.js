@@ -109,3 +109,31 @@ function build() {
 }
 
 module.exports = { sourceFiles, compactTree, orphanModules, toolCoverage, typecheck, lint, build };
+
+/**
+ * Headless-browser smoke test of every tool (agent/smoke/run.js).
+ * Returns { ok, pass, fail, results: [{id,status,reason}], byId } or { skipped }.
+ */
+function smoke(only) {
+  if (cfg.SKIP_BUILD || process.env.AI_SKIP_SMOKE === '1') return { skipped: true, results: [], byId: {} };
+  const args = ['agent/smoke/run.js'];
+  if (only && only.length) args.push('--only', only.join(','));
+  const r = git.tryRun(`node ${args.join(' ')}`, { timeout: 25 * 60 * 1000 });
+  let data = { results: [] };
+  try {
+    data = JSON.parse(fs.readFileSync(path.join(cfg.OUT_DIR, 'smoke.json'), 'utf-8'));
+  } catch {}
+  const byId = {};
+  for (const x of data.results || []) byId[x.id] = x;
+  return {
+    ok: !data.error,
+    error: data.error || '',
+    pass: (data.results || []).filter((x) => x.status === 'pass').length,
+    fail: (data.results || []).filter((x) => x.status === 'fail').length,
+    results: data.results || [],
+    byId,
+    log: r.out.slice(-1500),
+  };
+}
+
+module.exports.smoke = smoke;

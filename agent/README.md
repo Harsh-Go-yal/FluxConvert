@@ -14,6 +14,10 @@ schedule / email / "Run workflow"
  │            → tsc gate → commit checkpoint | rollback just that task   │
  │ 4. build  — next build; on failure: 1 repair pass, else drop newest   │
  │            task until green (never throws away the whole session)     │
+ │ 4b.smoke  — headless Chromium drives every tool page (upload → run →  │
+ │            valid download). Run before planning (so the planner sees  │
+ │            what is really broken) and after coding (a task that       │
+ │            breaks a working tool is dropped)                          │
  │ 5. learn  — update ROADMAP.md / MEMORY.md / CHANGELOG / history       │
  │ 6. ship   — push ai-dev, keep ONE PR ai-dev → main updated            │
  │            (AI_DELIVERY=push also merges it when the build is green)  │
@@ -32,6 +36,7 @@ Why `ai-dev`? Unmerged work accumulates there, so a session that runs before you
 | `DEEPSEEK_API_KEY` | yes | already set |
 | `GH_PAT` | yes | already set. Must have `repo` + `workflow` scopes (classic PAT) so the bot can push, open PRs and dispatch workflows. |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | yes | already set (needed by `next build`) |
+| `CLERK_SECRET_KEY` | yes | **add this** — without it the Clerk middleware makes every page return 500, so the smoke test cannot run. Copy from `apps/web/.env.local`. |
 
 ### Variables → same page → *Variables*
 
@@ -67,7 +72,8 @@ agent/
     report.js     Markdown / HTML report rendering
   prompts/conventions.md   read-only brief every coding run sees (how tools are wired, gotchas)
   state/                   committed memory: ROADMAP.md, MEMORY.md, history.jsonl, settings.json
-  out/                     per-run logs, prompts, report.json (uploaded as a workflow artifact)
+  smoke/                   headless-browser test of every tool (run.js, fixtures.js)
+  out/                     per-run logs, prompts, report.json, smoke.json (workflow artifact)
 ```
 
 ## Token efficiency
@@ -91,4 +97,13 @@ DEEPSEEK_API_KEY=... AI_SESSION_MINUTES=10 node orchestrator/session.js      # w
 node orchestrator/status.js
 ```
 
-Set `AI_SKIP_BUILD=1` to skip `next build` while debugging the loop.
+Set `AI_SKIP_BUILD=1` to skip `next build` (and the smoke test) while debugging the loop, or `AI_SKIP_SMOKE=1` to skip only the smoke test.
+
+Run the tool smoke test on its own:
+
+```bash
+cd apps/web && npm run build
+node agent/smoke/run.js                 # all tools → agent/out/smoke.md
+node agent/smoke/run.js --only merge-pdf,split-pdf
+node agent/smoke/run.js --base http://127.0.0.1:3000   # against an already-running server
+```

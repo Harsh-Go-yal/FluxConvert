@@ -90,6 +90,17 @@ jobs:
         working-directory: agent
         run: npm ci --no-audit --no-fund
 
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('agent/package-lock.json') }}
+
+      - name: Install Chromium for the smoke test
+        working-directory: agent
+        run: npx playwright install --with-deps chromium
+
       - name: 🤖 Run session
         run: node agent/orchestrator/session.js
         env:
@@ -99,6 +110,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           # Build
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}   # needed by the middleware, else every page 500s in the smoke test
           # Session tuning (repo Variables → Settings → Secrets and variables → Actions → Variables)
           AI_SESSION_MINUTES: ${{ inputs.session_minutes || vars.AI_SESSION_MINUTES || '30' }}
           AI_MAX_TASKS: ${{ vars.AI_MAX_TASKS || '6' }}

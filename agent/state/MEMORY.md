@@ -10,3 +10,7 @@ Durable facts for future sessions. One bullet each, non-obvious only.
 - apps/web/src/components/ui/index.ts is a barrel export; a missing module there breaks tsc for the whole app.
 - Dependencies cannot be installed during a session; only packages already in apps/web/package.json are usable.
 - The repo's CI (.github/workflows/ci.yml) runs on pull requests; the AI branch is `ai-dev` with one open PR to main.
+- Local PDF processing goes through a web worker backed by packages/wasm (Rust). That code is an unfinished AI-written stub: merge.rs returns the first file with a TODO, and the worker only knows merge/split/compress. It cannot be rebuilt in CI — route operations through pdf-lib helpers in apps/web/src/lib/pdf/ instead.
+- The UI swallows processing errors: handleProcess sets statusMessage to "Error: ..." but ProcessingStatus only renders that text while isProcessing is true, so failures look like nothing happened. The smoke test detects them via console.error "Processing failed:".
+- `next start` must be used for the smoke test; the `output: standalone` server hangs in the Clerk middleware layer. Do not pass -H 127.0.0.1 (Next 16 proxies to localhost internally and connections are refused).
+- CLERK_SECRET_KEY must be present or every page 500s ("Missing secretKey" in middleware) — the smoke test cannot run without it.
