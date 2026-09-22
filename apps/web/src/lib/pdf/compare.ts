@@ -38,10 +38,8 @@ async function loadPdfJs() {
 
 async function extractPages(file: File | Blob): Promise<string[]> {
   const pdfjs = await loadPdfJs();
-  const doc = await pdfjs.getDocument({
-    data: new Uint8Array(await file.arrayBuffer()),
-    isEvalSupported: false,
-  }).promise;
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  const doc = await loadingTask.promise;
   const pages: string[] = [];
   try {
     for (let i = 1; i <= doc.numPages; i++) {
@@ -55,7 +53,7 @@ async function extractPages(file: File | Blob): Promise<string[]> {
       );
     }
   } finally {
-    await doc.destroy();
+    await loadingTask.destroy();
   }
   return pages;
 }

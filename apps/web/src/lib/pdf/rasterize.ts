@@ -81,7 +81,8 @@ export async function rasterizePages(
 
   const pdfjs = await loadPdfJs();
   const data = new Uint8Array(await source.arrayBuffer());
-  const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
+  const loadingTask = pdfjs.getDocument({ data });
+  const doc = await loadingTask.promise;
   const out: RasterPage[] = [];
 
   try {
@@ -96,7 +97,7 @@ export async function rasterizePages(
 
       context.fillStyle = '#ffffff';
       context.fillRect(0, 0, canvas.width, canvas.height);
-      // pdfjs v5 requires the canvas element itself, not just the 2D context.
+      // pdfjs requires the canvas element itself, not just the 2D context.
       await page.render({ canvas, canvasContext: context, viewport }).promise;
 
       const pageBoxes = boxes.filter((b) => b.page === pageNumber - 1);
@@ -122,7 +123,7 @@ export async function rasterizePages(
       onProgress?.(Math.round((pageNumber / doc.numPages) * 100), pageNumber, doc.numPages);
     }
   } finally {
-    await doc.destroy();
+    await loadingTask.destroy();
   }
   return out;
 }

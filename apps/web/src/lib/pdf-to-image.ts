@@ -123,8 +123,10 @@ export async function pdfToImages(
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   let doc: PDFDocumentProxy;
+  let loadingTask: ReturnType<typeof pdfjs.getDocument> | undefined;
   try {
-    doc = await pdfjs.getDocument({ data: bytes }).promise;
+    loadingTask = pdfjs.getDocument({ data: bytes });
+    doc = await loadingTask.promise;
   } catch {
     const name = (file as File).name ?? 'the document';
     throw new Error(
@@ -170,7 +172,7 @@ export async function pdfToImages(
       }
     }
   } finally {
-    await doc.destroy();
+    await loadingTask?.destroy();
   }
 
   return results;

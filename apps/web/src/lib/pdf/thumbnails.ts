@@ -57,7 +57,7 @@ export async function renderPdfPageThumbnails(
       ? file
       : await (file as Blob).arrayBuffer();
 
-  const loadingTask = pdfjs.getDocument({ data, isEvalSupported: false });
+  const loadingTask = pdfjs.getDocument({ data });
   const doc: PDFDocumentProxy = await loadingTask.promise;
 
   const total = doc.numPages;
@@ -91,7 +91,7 @@ export async function renderPdfPageThumbnails(
     onProgress?.(i + 1, indices.length);
   }
 
-  await doc.destroy();
+  await loadingTask.destroy();
   return results;
 }
 
