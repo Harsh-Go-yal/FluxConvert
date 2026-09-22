@@ -4,10 +4,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { determineProcessingMode, ProcessingMode } from "@/lib/file-utils";
 import { PdfService } from '@/services/pdf-service';
+import type { PageNumberPosition, PageNumberFormat } from '@/lib/pdf/page-numbers';
 import { ImageService } from '@/services/image-service';
 import mammoth from 'mammoth';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import { htmlToPdfBlob, htmlFileToPdf } from '@/lib/html-to-pdf';
 import { Monitor, UploadCloud } from "lucide-react";
 
 import { DropzonePlaceholder } from "./dropzone-placeholder";
@@ -24,6 +24,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [downloadFilename, setDownloadFilename] = useState<string>("");
     const [statusMessage, setStatusMessage] = useState("");
+    const [errorMessage, setErrorMessage] = useState("");
 
     // Helper to determine tab from action
     const getTabFromAction = (act: string) => {
@@ -41,6 +42,9 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     const [startPage, setStartPage] = useState<number>(1);
     const [endPage, setEndPage] = useState<number>(1);
     const [pagesToRemove, setPagesToRemove] = useState<string>("");
+    const [pagesToExtract, setPagesToExtract] = useState<string>("");
+    const [pageNumberPosition, setPageNumberPosition] = useState<PageNumberPosition>("bottom-center");
+    const [pageNumberFormat, setPageNumberFormat] = useState<PageNumberFormat>("n");
     const [thumbnails, setThumbnails] = useState<string[]>([]);
     const [generatingThumbnails, setGeneratingThumbnails] = useState(false);
 
@@ -84,7 +88,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Generate thumbnails when a PDF is uploaded and action is remove-pages
     useEffect(() => {
         const generateThumbnails = async () => {
-            if (files.length > 0 && files[0].type === 'application/pdf' && action === 'remove-pages') {
+            if (files.length > 0 && files[0].type === 'application/pdf' && (action === 'remove-pages' || action === 'extract-pages')) {
                 console.log("Starting thumbnail generation...");
                 setGeneratingThumbnails(true);
                 setThumbnails([]); // Clear existing
@@ -158,7 +162,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
     // Auto-process when files are added if we are on a specific tool page
     useEffect(() => {
         // Don't auto-process for tools that require user input
-        const interactiveTools = ['remove-pages', 'split-pdf', 'protect-pdf', 'watermark-pdf', 'resize-image', 'compress-image'];
+        const interactiveTools = ['remove-pages', 'extract-pages', 'add-page-numbers', 'split-pdf', 'protect-pdf', 'unlock-pdf', 'watermark-pdf', 'resize-image', 'compress-image'];
 
         if (initialAction && files.length > 0 && !downloadUrl && !isProcessing && action === initialAction && mode) {
             if (!interactiveTools.includes(initialAction)) {
@@ -172,6 +176,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
 
         setIsProcessing(true);
         setDownloadUrl(null);
+        setErrorMessage("");
         setStatusMessage("Processing...");
 
         try {
@@ -186,9 +191,8 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                     filename = 'merged';
                     ext = 'pdf';
                 } else if (action === "split-pdf") {
-                    let start = startPage;
-                    let end = endPage;
-                    if (start < 1) start = 1;
+                    const start = Math.max(1, startPage);
+                    const end = endPage;
                     blob = await PdfService.splitPdf(files[0], start, end);
                     filename = `${filename}_split_${start}-${end}`;
                     ext = 'pdf';
@@ -223,6 +227,37 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 } else if (action === "image-to-pdf") {
                     blob = await PdfService.imageToPdf(files);
                     filename = 'images_converted';
+                    ext = 'pdf';
+                } else if (action === "extract-pages") {
+                    blob = await PdfService.extractPages(files[0], pagesToExtract);
+                    filename = `${filename}_extracted`;
+                    ext = 'pdf';
+                } else if (action === "add-page-numbers") {
+                    blob = await PdfService.addPageNumbers(files[0], {
+                        position: pageNumberPosition,
+                        format: pageNumberFormat,
+                    });
+                    filename = `${filename}_numbered`;
+                    ext = 'pdf';
+                } else if (action === "repair-pdf") {
+                    blob = await PdfService.repairPdf(files[0]);
+                    filename = `${filename}_repaired`;
+                    ext = 'pdf';
+                } else if (action === "ocr-pdf") {
+                    blob = await PdfService.ocrPdf(files[0], setStatusMessage);
+                    filename = `${filename}_text`;
+                    ext = 'txt';
+                } else if (action === "pdf-to-word") {
+                    blob = await PdfService.pdfToWord(files[0]);
+                    filename = `${filename}_converted`;
+                    ext = 'docx';
+                } else if (action === "pdf-to-excel") {
+                    blob = await PdfService.pdfToExcel(files[0]);
+                    filename = `${filename}_converted`;
+                    ext = 'xlsx';
+                } else if (action === "excel-to-pdf") {
+                    blob = await PdfService.excelToPdf(files[0]);
+                    filename = `${filename}_converted`;
                     ext = 'pdf';
                 }
                 // --- IMAGE ACTIONS ---
@@ -312,127 +347,18 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                     blob = new Blob([result.value], { type: 'text/html' });
                     ext = 'html';
                 } else if (action === "word-to-pdf") {
+                    setStatusMessage("Reading document...");
                     const arrayBuffer = await files[0].arrayBuffer();
-                    const result = await mammoth.convertToHtml({ arrayBuffer });
-                    const html = result.value;
-
-                    // Create an iframe to isolate styles
-                    const iframe = document.createElement('iframe');
-                    iframe.style.position = 'absolute';
-                    iframe.style.left = '-9999px';
-                    iframe.style.top = '0';
-                    iframe.style.width = '800px'; // Approx A4 width in pixels
-                    document.body.appendChild(iframe);
-
-                    try {
-                        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                        if (!doc) throw new Error("Could not access iframe document");
-
-                        doc.open();
-                        doc.write(`
-                            <html>
-                            <head>
-                                <style>
-                                    body {
-                                        font-family: 'Times New Roman', Times, serif;
-                                        font-size: 12pt;
-                                        line-height: 1.6;
-                                        color: #333;
-                                        background: white;
-                                        margin: 0;
-                                        padding: 40px; /* More generous padding */
-                                        width: 100%;
-                                        box-sizing: border-box;
-                                        text-align: justify;
-                                    }
-                                    p { margin-bottom: 1.2em; text-indent: 1em; }
-                                    h1, h2, h3, h4, h5, h6 { 
-                                        margin-top: 2em; 
-                                        margin-bottom: 0.8em; 
-                                        font-weight: bold; 
-                                        color: #000;
-                                        line-height: 1.2;
-                                    }
-                                    h1 { font-size: 24pt; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-                                    h2 { font-size: 18pt; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-                                    h3 { font-size: 14pt; }
-                                    img { max-width: 100%; height: auto; display: block; margin: 20px auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                                    table { 
-                                        border-collapse: collapse; 
-                                        width: 100%; 
-                                        margin-bottom: 2em; 
-                                        font-size: 11pt;
-                                    }
-                                    td, th { 
-                                        border: 1px solid #e2e8f0; 
-                                        padding: 12px; 
-                                        text-align: left; 
-                                        }
-                                    th { background-color: #f8fafc; font-weight: bold; }
-                                    blockquote {
-                                        border-left: 4px solid #e2e8f0;
-                                        margin: 1.5em 0;
-                                        padding-left: 1em;
-                                        color: #64748b;
-                                        font-style: italic;
-                                    }
-                                    a { color: #2563eb; text-decoration: none; }
-                                    ul, ol { margin-bottom: 1.2em; padding-left: 2em; }
-                                    li { margin-bottom: 0.5em; }
-                                </style>
-                            </head>
-                            <body>
-                                ${html}
-                            </body>
-                            </html>
-                        `);
-                        doc.close();
-
-                        // Wait for images to load
-                        await new Promise(resolve => {
-                            const images = doc.getElementsByTagName('img');
-                            if (images.length === 0) {
-                                resolve(null);
-                                return;
-                            }
-
-                            let loaded = 0;
-                            const check = () => {
-                                loaded++;
-                                if (loaded >= images.length) resolve(null);
-                            };
-
-                            Array.from(images).forEach(img => {
-                                if (img.complete) check();
-                                else {
-                                    img.onload = check;
-                                    img.onerror = check;
-                                }
-                            });
-                        });
-
-                        // Use jsPDF.html for automatic pagination
-                        const pdf = new jsPDF('p', 'mm', 'a4');
-                        await new Promise<void>((resolve) => {
-                            (pdf as any).html(doc.body, {
-                                callback: (doc: jsPDF) => {
-                                    blob = doc.output('blob');
-                                    resolve();
-                                },
-                                x: 10,
-                                y: 10,
-                                width: 190, // A4 width (210) - margins (20)
-                                windowWidth: 800,
-                                html2canvas: html2canvas as any,
-                                autoPaging: 'text'
-                            });
-                        });
-
-                        filename = `${filename}_converted`;
-                        ext = 'pdf';
-                    } finally {
-                        document.body.removeChild(iframe);
-                    }
+                    const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+                    setStatusMessage("Rendering PDF...");
+                    blob = await htmlToPdfBlob(html);
+                    filename = `${filename}_converted`;
+                    ext = 'pdf';
+                } else if (action === "html-to-pdf") {
+                    setStatusMessage("Rendering PDF...");
+                    blob = await htmlFileToPdf(files[0]);
+                    filename = `${filename}_converted`;
+                    ext = 'pdf';
                 }
             } else if (mode === ProcessingMode.CLOUD) {
             }
@@ -445,10 +371,14 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 throw new Error("No output generated.");
             }
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Processing failed:", error);
-            const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during processing.";
-            setStatusMessage(`Error: ${errorMessage}`);
+            const message =
+                error instanceof Error && error.message
+                    ? error.message
+                    : "An unexpected error occurred during processing.";
+            setErrorMessage(message);
+            setStatusMessage("");
         } finally {
             setIsProcessing(false);
         }
@@ -516,6 +446,12 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                         setEndPage={setEndPage}
                         pagesToRemove={pagesToRemove}
                         setPagesToRemove={setPagesToRemove}
+                        pagesToExtract={pagesToExtract}
+                        setPagesToExtract={setPagesToExtract}
+                        pageNumberPosition={pageNumberPosition}
+                        setPageNumberPosition={setPageNumberPosition}
+                        pageNumberFormat={pageNumberFormat}
+                        setPageNumberFormat={setPageNumberFormat}
                         thumbnails={thumbnails}
                         generatingThumbnails={generatingThumbnails}
                         compressionMode={compressionMode}
@@ -551,6 +487,7 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                     <ProcessingStatus
                         isProcessing={isProcessing}
                         statusMessage={statusMessage}
+                        errorMessage={errorMessage}
                         downloadUrl={downloadUrl}
                         downloadFilename={downloadFilename}
                         handleProcess={handleProcess}

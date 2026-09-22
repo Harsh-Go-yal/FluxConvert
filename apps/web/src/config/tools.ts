@@ -25,6 +25,11 @@ export interface Tool {
     category: ToolCategory;
     href: string;
     color: string;
+    /**
+     * Tools that still need a dedicated editor UI. The tool page shows a
+     * "coming soon" panel instead of an uploader that cannot do anything.
+     */
+    comingSoon?: boolean;
 }
 
 export const tools: Tool[] = [
@@ -72,7 +77,8 @@ export const tools: Tool[] = [
         icon: Layers,
         category: "PDF",
         href: "/organize-pdf",
-        color: "text-red-500"
+        color: "text-red-500",
+        comingSoon: true
     },
     {
         id: "scan-pdf",
@@ -81,7 +87,8 @@ export const tools: Tool[] = [
         icon: FileImage,
         category: "PDF",
         href: "/scan-pdf",
-        color: "text-red-500"
+        color: "text-red-500",
+        comingSoon: true
     },
 
     // Optimize PDF
@@ -186,7 +193,8 @@ export const tools: Tool[] = [
         icon: FileSpreadsheet,
         category: "Convert",
         href: "/pdf-to-powerpoint",
-        color: "text-orange-500"
+        color: "text-orange-500",
+        comingSoon: true
     },
     {
         id: "pdf-to-excel",
@@ -204,7 +212,8 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "Convert",
         href: "/pdf-to-pdfa",
-        color: "text-red-700"
+        color: "text-red-700",
+        comingSoon: true
     },
 
     // Edit PDF
@@ -242,7 +251,8 @@ export const tools: Tool[] = [
         icon: Scissors,
         category: "PDF",
         href: "/crop-pdf",
-        color: "text-red-500"
+        color: "text-red-500",
+        comingSoon: true
     },
     {
         id: "edit-pdf",
@@ -251,7 +261,8 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "PDF",
         href: "/edit-pdf",
-        color: "text-red-500"
+        color: "text-red-500",
+        comingSoon: true
     },
 
     // PDF Security
@@ -280,7 +291,8 @@ export const tools: Tool[] = [
         icon: FileText,
         category: "Security",
         href: "/sign-pdf",
-        color: "text-blue-600"
+        color: "text-blue-600",
+        comingSoon: true
     },
     {
         id: "redact-pdf",
@@ -289,7 +301,8 @@ export const tools: Tool[] = [
         icon: Shield,
         category: "Security",
         href: "/redact-pdf",
-        color: "text-black"
+        color: "text-black",
+        comingSoon: true
     },
     {
         id: "compare-pdf",
@@ -298,7 +311,8 @@ export const tools: Tool[] = [
         icon: Layers,
         category: "PDF",
         href: "/compare-pdf",
-        color: "text-red-500"
+        color: "text-red-500",
+        comingSoon: true
     },
 
     // Image Tools (kept for completeness)

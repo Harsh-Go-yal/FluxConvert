@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, Download, Monitor, UploadCloud } from "lucide-react";
+import { AlertCircle, Loader2, Download, Monitor, UploadCloud } from "lucide-react";
 import { ProcessingMode } from "@/lib/file-utils";
 
 interface ProcessingStatusProps {
     isProcessing: boolean;
     statusMessage: string;
+    errorMessage?: string;
     downloadUrl: string | null;
     downloadFilename: string;
     handleProcess: () => void;
@@ -13,10 +14,25 @@ interface ProcessingStatusProps {
 }
 
 export function ProcessingStatus({
-    isProcessing, statusMessage, downloadUrl, downloadFilename, handleProcess, mode, action
+    isProcessing, statusMessage, errorMessage, downloadUrl, downloadFilename, handleProcess, mode, action
 }: ProcessingStatusProps) {
     return (
         <div className="flex flex-col gap-4 mt-8">
+            {/* Processing errors used to be swallowed into statusMessage, which only
+                renders while processing — so failures looked like nothing happened. */}
+            {errorMessage && !isProcessing && (
+                <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-left animate-in fade-in slide-in-from-top-2"
+                >
+                    <AlertCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+                    <div className="min-w-0">
+                        <p className="font-medium text-destructive">Couldn&apos;t finish that</p>
+                        <p className="text-sm text-muted-foreground break-words">{errorMessage}</p>
+                    </div>
+                </div>
+            )}
+
             {/* Hide Process button if download is ready */}
             {!downloadUrl && (
                 <Button

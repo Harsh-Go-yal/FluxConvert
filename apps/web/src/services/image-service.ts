@@ -38,43 +38,58 @@ export class ImageService {
 
     static async toFormat(file: File, format: 'png' | 'jpeg' | 'webp'): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('toFormat', { fileBuffer, format }, [fileBuffer]);
+        return this.send('toFormat', {
+            fileBuffer,
+            fileType: file.type, format }, [fileBuffer]);
     }
 
     static async grayscale(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'grayscale(100%)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'grayscale(100%)' }, [fileBuffer]);
     }
 
     static async sepia(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'sepia(100%)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'sepia(100%)' }, [fileBuffer]);
     }
 
     static async invert(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'invert(100%)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'invert(100%)' }, [fileBuffer]);
     }
 
     static async blur(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'blur(5px)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'blur(5px)' }, [fileBuffer]);
     }
 
     static async brightness(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'brightness(150%)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'brightness(150%)' }, [fileBuffer]);
     }
 
     static async contrast(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('applyFilter', { fileBuffer, filter: 'contrast(150%)' }, [fileBuffer]);
+        return this.send('applyFilter', {
+            fileBuffer,
+            fileType: file.type, filter: 'contrast(150%)' }, [fileBuffer]);
     }
 
     static async sharpen(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
         return this.send('convolution', {
             fileBuffer,
+            fileType: file.type,
             kernel: [0, -1, 0, -1, 5, -1, 0, -1, 0]
         }, [fileBuffer]);
     }
@@ -83,19 +98,20 @@ export class ImageService {
         const fileBuffer = await file.arrayBuffer();
         return this.send('convolution', {
             fileBuffer,
+            fileType: file.type,
             kernel: [-1, -1, -1, -1, 8, -1, -1, -1, -1]
         }, [fileBuffer]);
     }
 
     static async pixelate(file: File): Promise<Blob> {
         const fileBuffer = await file.arrayBuffer();
-        return this.send('pixelate', { fileBuffer }, [fileBuffer]);
+        return this.send('pixelate', { fileBuffer, fileType: file.type }, [fileBuffer]);
     }
 
     static async performOCR(file: File, setStatusMessage?: (msg: string) => void): Promise<Blob> {
         if (setStatusMessage) setStatusMessage("Processing OCR in worker...");
         const fileBuffer = await file.arrayBuffer();
-        return this.send('ocr', { fileBuffer }, [fileBuffer]);
+        return this.send('ocr', { fileBuffer, fileType: file.type }, [fileBuffer]);
     }
 
     static async compress(file: File, options: {
@@ -105,8 +121,8 @@ export class ImageService {
         targetUnit: "KB" | "MB";
     }): Promise<Blob> {
         let maxSizeMB = 1; // Default
-        let maxWidthOrHeight = 1920; // Default
-        let useWebWorker = true;
+        const maxWidthOrHeight = 1920; // Default
+        const useWebWorker = true;
 
         if (options.mode === "percentage") {
             // Approximate size based on percentage
@@ -159,6 +175,7 @@ export class ImageService {
         const fileBuffer = await file.arrayBuffer();
         return this.send('resize', {
             fileBuffer,
+            fileType: file.type,
             ...options
         }, [fileBuffer]);
     }

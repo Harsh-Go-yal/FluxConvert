@@ -72,7 +72,33 @@ export default async function ToolPage({ params }: Props) {
                 <div className="max-w-4xl mx-auto mb-24 relative z-10">
                     <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-purple-600/20 rounded-3xl blur-3xl -z-10 opacity-50" />
                     <div className="glass rounded-3xl p-2 md:p-6 shadow-2xl shadow-black/5 border border-white/10 dark:border-white/5 bg-card/50 backdrop-blur-xl">
-                        <ClientFileUploader initialAction={tool.id} />
+                        {tool.comingSoon ? (
+                            <div className="p-8 md:p-12 text-center space-y-5">
+                                <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+                                    Coming soon
+                                </span>
+                                <h2 className="text-2xl font-bold">{tool.title} is still being built</h2>
+                                <p className="text-muted-foreground max-w-xl mx-auto">
+                                    This one needs a dedicated editor, so we would rather ship it properly than
+                                    hand you a page that quietly does nothing. In the meantime, these work today:
+                                </p>
+                                <div className="flex flex-wrap justify-center gap-3 pt-2">
+                                    {tools
+                                        .filter((t) => !t.comingSoon && t.category === tool.category && t.id !== tool.id)
+                                        .slice(0, 4)
+                                        .map((t) => (
+                                            <Link key={t.id} href={t.href}>
+                                                <Button variant="outline" className="rounded-xl">
+                                                    <t.icon className={`w-4 h-4 mr-2 ${t.color}`} />
+                                                    {t.title}
+                                                </Button>
+                                            </Link>
+                                        ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <ClientFileUploader initialAction={tool.id} />
+                        )}
                     </div>
                 </div>
 

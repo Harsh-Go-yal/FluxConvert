@@ -33,7 +33,7 @@ export function PdfSplitForm() {
         setError(null);
 
         try {
-            const { blobs, filenames } = await PdfService.handlePdfSplit(file, ranges, mode);
+            const { blobs, filenames } = await PdfService.handlePdfSplit(file, ranges);
             const urls = blobs.map((blob, i) => ({
                 url: URL.createObjectURL(blob),
                 name: filenames[i]

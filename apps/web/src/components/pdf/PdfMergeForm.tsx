@@ -32,7 +32,7 @@ export function PdfMergeForm() {
         setError(null);
 
         try {
-            const { blob, filename } = await PdfService.handlePdfMerge(files, mode);
+            const { blob, filename } = await PdfService.handlePdfMerge(files);
             const url = URL.createObjectURL(blob);
             setDownloadUrl(url);
         } catch (err: any) {

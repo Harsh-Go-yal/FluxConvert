@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion } from 'framer-motion';
-import { PDFDocument } from 'pdf-lib';
+import { PdfService } from '@/services/pdf-service';
 import { ArrowDown, ArrowUp, Download, FileImage, Loader2, Sparkles } from 'lucide-react';
 import { Dropzone, type DropzoneFile } from '@/components/dropzone';
 import { useToast } from '@/components/ui/toast';
@@ -51,26 +51,11 @@ export default function ImageToPdfPage() {
     setBusy(true);
     setResultUrl(null);
     try {
-      const pdf = await PDFDocument.create();
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        setFiles((prev) =>
-          prev.map((x) => (x.id === f.id ? { ...x, status: 'processing', progress: 20 } : x)),
-        );
-        const bytes = new Uint8Array(await f.file.arrayBuffer());
-        const isPng = f.file.type.includes('png') || f.file.name.toLowerCase().endsWith('.png');
-        const img = isPng ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+      // One shared implementation (validates PNG/JPEG and reports unsupported files clearly).
+      setFiles((prev) => prev.map((x) => ({ ...x, status: 'processing' as const, progress: 20 })));
+      const blob = await PdfService.imageToPdf(files.map((f) => f.file));
+      setFiles((prev) => prev.map((x) => ({ ...x, status: 'done' as const, progress: 100 })));
 
-        const page = pdf.addPage([img.width, img.height]);
-        page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
-
-        setFiles((prev) =>
-          prev.map((x) => (x.id === f.id ? { ...x, status: 'done', progress: 100 } : x)),
-        );
-      }
-
-      const out = await pdf.save();
-      const blob = new Blob([out as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       setResultUrl(url);
       setResultSize(blob.size);
@@ -79,10 +64,12 @@ export default function ImageToPdfPage() {
         description: `${files.length} images combined (${formatBytes(blob.size)})`,
         variant: 'success',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      setFiles((prev) => prev.map((x) => ({ ...x, status: 'error' as const })));
       toast({
         title: 'Conversion failed',
-        description: err?.message || 'Unsupported image format',
+        description:
+          err instanceof Error && err.message ? err.message : 'Unsupported image format',
         variant: 'error',
       });
     } finally {

@@ -46,7 +46,9 @@ const MAGIC = {
 function readTools() {
   const src = fs.readFileSync(path.join(cfg.WEB_DIR, 'src/config/tools.ts'), 'utf-8');
   const tools = [];
-  for (const m of src.matchAll(/\{\s*id:\s*"([^"]+)"[\s\S]*?href:\s*"([^"]+)"/g)) tools.push({ id: m[1], href: m[2] });
+  for (const m of src.matchAll(/\{\s*id:\s*"([^"]+)"[\s\S]*?href:\s*"([^"]+)"(,\s*comingSoon:\s*true)?/g)) {
+    tools.push({ id: m[1], href: m[2], comingSoon: Boolean(m[3]) });
+  }
   return tools;
 }
 
@@ -147,6 +149,12 @@ async function testTool(browser, base, tool, files) {
     await input.waitFor({ state: 'attached', timeout: 15000 }).catch(() => { throw new Error('no file input on the page'); });
     await input.setInputFiles(files);
 
+    // Fill option fields the tool needs before it can run.
+    const pageInput = page.locator('input#pages-to-extract, input#pages-to-remove, input[placeholder*="1-3" i]').first();
+    if (await pageInput.isVisible().catch(() => false)) await pageInput.fill('1').catch(() => {});
+    const passwordInput = page.locator('input[type=password]').first();
+    if (await passwordInput.isVisible().catch(() => false)) await passwordInput.fill('smoketest123').catch(() => {});
+
     const downloadBtn = page.locator('button:has-text("Download")').first();
     // Tool pages use the shared uploader ("Process Locally" / "Upload & Process"); bespoke pages
     // (e.g. /image-to-pdf) use their own verb button.
@@ -211,6 +219,11 @@ async function main() {
   const results = [];
   console.log(`🧪 smoke-testing ${tools.length} tool(s) against ${base}`);
   for (const t of tools) {
+    if (t.comingSoon) {
+      results.push({ id: t.id, href: t.href, status: 'skip', reason: 'marked coming soon', ms: 0 });
+      console.log(`  ⏭️  ${t.id}: coming soon`);
+      continue;
+    }
     const files = inputsFor(t.id, fx);
     if (!files) {
       results.push({ id: t.id, href: t.href, status: 'skip', reason: 'no sample input available', ms: 0 });

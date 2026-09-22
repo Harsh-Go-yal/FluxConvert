@@ -5,6 +5,9 @@ import { WatermarkConfig } from "./configs/watermark-config";
 import { RemovePagesConfig } from "./configs/remove-pages-config";
 import { CompressConfig } from "./configs/compress-config";
 import { ResizeConfig } from "./configs/resize-config";
+import { ExtractPagesConfig } from "./configs/extract-pages-config";
+import { PageNumbersConfig } from "./configs/page-numbers-config";
+import type { PageNumberFormat, PageNumberPosition } from "@/lib/pdf/page-numbers";
 
 interface ActionConfigProps {
     action: string;
@@ -20,6 +23,12 @@ interface ActionConfigProps {
     setEndPage: (val: number) => void;
     pagesToRemove: string;
     setPagesToRemove: (val: string) => void;
+    pagesToExtract: string;
+    setPagesToExtract: (val: string) => void;
+    pageNumberPosition: PageNumberPosition;
+    setPageNumberPosition: (val: PageNumberPosition) => void;
+    pageNumberFormat: PageNumberFormat;
+    setPageNumberFormat: (val: PageNumberFormat) => void;
     thumbnails: string[];
     generatingThumbnails: boolean;
     compressionMode: "percentage" | "target";
@@ -55,6 +64,8 @@ interface ActionConfigProps {
 export function ActionConfig({
     action, files, setFiles, password, setPassword, watermarkText, setWatermarkText,
     startPage, setStartPage, endPage, setEndPage, pagesToRemove, setPagesToRemove,
+    pagesToExtract, setPagesToExtract,
+    pageNumberPosition, setPageNumberPosition, pageNumberFormat, setPageNumberFormat,
     thumbnails, generatingThumbnails,
     compressionMode, setCompressionMode, compressionPercentage, setCompressionPercentage,
     targetSize, setTargetSize, targetUnit, setTargetUnit,
@@ -80,6 +91,20 @@ export function ActionConfig({
                 setPagesToRemove={setPagesToRemove}
                 thumbnails={thumbnails}
                 generatingThumbnails={generatingThumbnails}
+            />;
+        case "extract-pages":
+            return <ExtractPagesConfig
+                pagesToExtract={pagesToExtract}
+                setPagesToExtract={setPagesToExtract}
+                thumbnails={thumbnails}
+                generatingThumbnails={generatingThumbnails}
+            />;
+        case "add-page-numbers":
+            return <PageNumbersConfig
+                position={pageNumberPosition}
+                setPosition={setPageNumberPosition}
+                format={pageNumberFormat}
+                setFormat={setPageNumberFormat}
             />;
         case "compress-image":
             return <CompressConfig
