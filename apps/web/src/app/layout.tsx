@@ -52,5 +52,5 @@ export default function RootLayout({
 
   // Mounting ClerkProvider without a publishable key throws while prerendering,
   // which fails the whole build. Sign-in is simply unavailable in that case.
-  return isAuthConfigured ? <ClerkProvider>{page}</ClerkProvider> : page;
+  return isAuthConfigured ? <ClerkProvider afterSignOutUrl="/">{page}</ClerkProvider> : page;
 }
