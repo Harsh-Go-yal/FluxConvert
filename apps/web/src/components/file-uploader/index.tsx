@@ -12,7 +12,6 @@ import type { SignatureState } from './configs/sign-config';
 import type { TextAnnotation } from './configs/edit-config';
 import type { ScanPage } from './configs/scan-config';
 import { ImageService } from '@/services/image-service';
-import mammoth from 'mammoth';
 import { htmlToPdfBlob, htmlFileToPdf } from '@/lib/html-to-pdf';
 import { Monitor, UploadCloud } from "lucide-react";
 
@@ -441,17 +440,20 @@ export default function FileUploader({ initialAction }: { initialAction?: string
                 }
                 // --- DOCUMENT ACTIONS ---
                 else if (action === "to-text") {
+                    const { default: mammoth } = await import('mammoth');
                     const arrayBuffer = await files[0].arrayBuffer();
                     const result = await mammoth.extractRawText({ arrayBuffer });
                     blob = new Blob([result.value], { type: 'text/plain' });
                     ext = 'txt';
                 } else if (action === "to-html") {
+                    const { default: mammoth } = await import('mammoth');
                     const arrayBuffer = await files[0].arrayBuffer();
                     const result = await mammoth.convertToHtml({ arrayBuffer });
                     blob = new Blob([result.value], { type: 'text/html' });
                     ext = 'html';
                 } else if (action === "word-to-pdf") {
                     setStatusMessage("Reading document...");
+                    const { default: mammoth } = await import('mammoth');
                     const arrayBuffer = await files[0].arrayBuffer();
                     const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
                     setStatusMessage("Rendering PDF...");

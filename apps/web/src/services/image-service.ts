@@ -1,4 +1,3 @@
-import imageCompression from 'browser-image-compression';
 
 export class ImageService {
     private static worker: Worker | null = null;
@@ -149,6 +148,7 @@ export class ImageService {
         console.log(`Compressing to max ${maxSizeMB} MB`);
 
         try {
+            const { default: imageCompression } = await import('browser-image-compression');
             const compressedFile = await imageCompression(file, {
                 maxSizeMB,
                 maxWidthOrHeight,

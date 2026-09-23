@@ -25,8 +25,16 @@ import { Menu, Zap, User, Settings, CreditCard, LogOut, Sparkles } from "lucide-
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import dynamic from "next/dynamic";
 import { isAuthConfigured } from "@/lib/auth-config";
+
+// Clerk is ~245 KB and no tool needs an account, so the auth controls load
+// after the page has painted. The placeholder reserves their width to stop
+// the header shifting when they appear.
+const AuthButtons = dynamic(() => import("@/components/auth-buttons"), {
+    ssr: false,
+    loading: () => <div className="h-9 w-[132px]" aria-hidden />,
+});
 
 // ... (imports remain the same, remove unused ones if any)
 
@@ -139,22 +147,8 @@ export function Header() {
                             <ThemeToggle />
                         </div>
 
-                        {/* Auth Buttons — Clerk components only render when auth is configured */}
-                        {isAuthConfigured && (
-                            <div className="flex items-center gap-2">
-                                <SignedOut>
-                                    <SignInButton mode="modal">
-                                        <Button variant="ghost" size="sm">Log in</Button>
-                                    </SignInButton>
-                                    <SignUpButton mode="modal">
-                                        <Button size="sm">Sign up</Button>
-                                    </SignUpButton>
-                                </SignedOut>
-                                <SignedIn>
-                                    <UserButton />
-                                </SignedIn>
-                            </div>
-                        )}
+                        {/* Auth controls: loaded after first paint, see AuthButtons */}
+                        {isAuthConfigured && <AuthButtons />}
 
                         {/* Mobile Menu Toggle */}
                         <div className="lg:hidden">
@@ -188,13 +182,7 @@ export function Header() {
                             <Button className="w-full bg-primary/10 text-primary hover:bg-primary/20 border-0">
                                 <Sparkles className="w-4 h-4 mr-2" /> Go Pro
                             </Button>
-                            {isAuthConfigured && (
-                                <SignedOut>
-                                    <SignInButton mode="modal">
-                                        <Button className="w-full">Log in</Button>
-                                    </SignInButton>
-                                </SignedOut>
-                            )}
+                            {isAuthConfigured && <AuthButtons mobile />}
                         </div>
                     </div>
                 )}

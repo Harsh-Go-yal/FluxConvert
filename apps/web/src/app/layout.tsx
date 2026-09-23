@@ -62,7 +62,6 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-import { ClerkProvider } from "@clerk/nextjs";
 import { isAuthConfigured } from "@/lib/auth-config";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
@@ -95,7 +94,9 @@ export default function RootLayout({
       </html>
   );
 
-  // Mounting ClerkProvider without a publishable key throws while prerendering,
-  // which fails the whole build. Sign-in is simply unavailable in that case.
-  return isAuthConfigured ? <ClerkProvider afterSignOutUrl="/">{page}</ClerkProvider> : page;
+  // No app-wide ClerkProvider: the header's auth island and the sign-in pages
+  // bring their own, which keeps Clerk off the critical path for every visitor
+  // who never signs in — and means a missing publishable key cannot break the
+  // build by throwing during prerender.
+  return page;
 }

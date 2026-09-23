@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { SignIn } from "@clerk/nextjs";
+import { ClerkProvider, SignIn } from "@clerk/nextjs";
 import { isAuthConfigured } from "@/lib/auth-config";
 
 export default function Page() {
     return (
         <div className="flex items-center justify-center min-h-[calc(100vh-80px)] bg-muted/20">
             {isAuthConfigured ? (
-                <SignIn />
+                <ClerkProvider afterSignOutUrl="/">
+                    <SignIn />
+                </ClerkProvider>
             ) : (
                 // Accounts are optional: every file tool works without one.
                 <div className="max-w-md text-center space-y-4 p-8">

@@ -8,26 +8,38 @@
 //
 // Protect/Unlock still need the server API, because pdf-lib cannot encrypt.
 
-import { PDFDocument } from 'pdf-lib';
-import {
-    mergePdfSources,
-    rotatePdfPages,
-    deletePdfPages,
-    extractPdfPages,
-    reorderPdfPages,
-} from '../lib/pdf/operations';
-import { splitPdf as splitPdfLib, parseRangeString } from '../lib/pdf/split';
-import { compressPdf as compressPdfLib } from '../lib/pdf/compress';
-import { watermarkPdf as watermarkPdfLib } from '../lib/pdf/watermark';
-import { addPageNumbers, type PageNumberOptions } from '../lib/pdf/page-numbers';
+// Types are erased at build time, so importing them costs nothing at runtime.
+import type { PageNumberOptions } from '../lib/pdf/page-numbers';
+import type { ImageFormat } from '../lib/pdf-to-image';
+import type { CropMargins, CropOptions } from '../lib/pdf/crop';
+import type { PageBox } from '../lib/pdf/rasterize';
+import type { SignOptions } from '../lib/pdf/sign';
+import type { CompareResult } from '../lib/pdf/compare';
+// Page-range parsing is dependency-free, so it stays eager.
 import { parsePageRanges } from '../lib/pdf/ranges';
-import { renderPdfPageThumbnails } from '../lib/pdf/thumbnails';
-import { pdfToImages as pdfToImagesLib, type ImageFormat } from '../lib/pdf-to-image';
-import { cropPdf as cropPdfLib, type CropMargins, type CropOptions } from '../lib/pdf/crop';
-import { rasterizePages, pdfFromImages, flattenPdf, type PageBox } from '../lib/pdf/rasterize';
-import { signPdf as signPdfLib, type SignOptions } from '../lib/pdf/sign';
-import { comparePdfs as comparePdfsLib, comparisonToHtml, type CompareResult } from '../lib/pdf/compare';
-import { pdfToPptx as pdfToPptxLib } from '../lib/pdf-to-pptx';
+
+/**
+ * Heavy dependencies are loaded on demand.
+ *
+ * Importing them at the top of this file put pdf-lib, pdfjs and every PDF
+ * helper into the bundle of all 31 tool pages, so opening "Merge PDF" also
+ * downloaded the OCR, redaction and PowerPoint code. Each loader below becomes
+ * its own chunk that is fetched the first time that capability is used, and
+ * the browser caches it afterwards.
+ */
+const loadPdfLib = () => import('pdf-lib');
+const loadOperations = () => import('../lib/pdf/operations');
+const loadSplit = () => import('../lib/pdf/split');
+const loadCompress = () => import('../lib/pdf/compress');
+const loadWatermark = () => import('../lib/pdf/watermark');
+const loadPageNumbers = () => import('../lib/pdf/page-numbers');
+const loadThumbnails = () => import('../lib/pdf/thumbnails');
+const loadPdfToImage = () => import('../lib/pdf-to-image');
+const loadCrop = () => import('../lib/pdf/crop');
+const loadRasterize = () => import('../lib/pdf/rasterize');
+const loadSign = () => import('../lib/pdf/sign');
+const loadCompare = () => import('../lib/pdf/compare');
+const loadPptx = () => import('../lib/pdf-to-pptx');
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL as string) || '/api/pdf';
 
@@ -49,6 +61,7 @@ async function zipBlobs(
 
 /** Page count without keeping the whole document around. */
 async function pageCount(file: File | Blob): Promise<number> {
+    const { PDFDocument } = await loadPdfLib();
     const doc = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
     return doc.getPageCount();
 }
@@ -136,6 +149,7 @@ export class PdfService {
         inputFile: File,
         ranges: string,
     ): Promise<{ blobs: Blob[]; filenames: string[] }> {
+        const { splitPdf: splitPdfLib, parseRangeString } = await loadSplit();
         const parsed = ranges?.trim() ? parseRangeString(ranges) : [];
         const { outputs } = await splitPdfLib(inputFile, {
             mode: parsed.length ? 'ranges' : 'individual',
@@ -153,6 +167,7 @@ export class PdfService {
         if (files.length < 2) {
             throw new Error('Select at least two PDF files to merge.');
         }
+        const { mergePdfSources } = await loadOperations();
         const { bytes } = await mergePdfSources(files);
         return toPdfBlob(bytes);
     }
@@ -163,6 +178,7 @@ export class PdfService {
         const from = Math.max(1, Math.min(start || 1, total));
         const to = Math.max(from, Math.min(end || total, total));
         const indices = Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
+        const { extractPdfPages } = await loadOperations();
         const { bytes } = await extractPdfPages(file, indices);
         return toPdfBlob(bytes);
     }
@@ -178,12 +194,14 @@ export class PdfService {
         // quietly try to delete the entire document. Ask for a selection instead.
         if (!pagesToRemove?.trim()) throw new Error('Choose which pages to remove.');
         const indices = await indicesFrom(file, pagesToRemove);
+        const { deletePdfPages } = await loadOperations();
         const { bytes } = await deletePdfPages(file, indices);
         return toPdfBlob(bytes);
     }
 
     static async extractPages(file: File, pages: string): Promise<Blob> {
         const indices = await indicesFrom(file, pages);
+        const { extractPdfPages } = await loadOperations();
         const { bytes } = await extractPdfPages(file, indices);
         return toPdfBlob(bytes);
     }
@@ -199,6 +217,7 @@ export class PdfService {
         rotations: Record<number, number> = {},
     ): Promise<Blob> {
         if (!order.length) throw new Error('Keep at least one page.');
+        const { reorderPdfPages, rotatePdfPages } = await loadOperations();
         const { bytes } = await reorderPdfPages(file, order);
         if (Object.keys(rotations).length === 0) return toPdfBlob(bytes);
         const { bytes: rotated } = await rotatePdfPages(bytes, rotations);
@@ -210,6 +229,7 @@ export class PdfService {
         const total = await pageCount(file);
         const rotations: Record<number, number> = {};
         for (let i = 0; i < total; i++) rotations[i] = angle;
+        const { rotatePdfPages } = await loadOperations();
         const { bytes } = await rotatePdfPages(file, rotations);
         return toPdfBlob(bytes);
     }
@@ -217,6 +237,7 @@ export class PdfService {
     static async watermarkPdf(file: File, text: string): Promise<Blob> {
         const label = (text ?? '').trim();
         if (!label) throw new Error('Enter the watermark text.');
+        const { watermarkPdf: watermarkPdfLib } = await loadWatermark();
         const { bytes } = await watermarkPdfLib(file, {
             type: 'text',
             text: label,
@@ -227,17 +248,20 @@ export class PdfService {
     }
 
     static async addPageNumbers(file: File, options: PageNumberOptions = {}): Promise<Blob> {
+        const { addPageNumbers } = await loadPageNumbers();
         const { bytes } = await addPageNumbers(file, options);
         return toPdfBlob(bytes);
     }
 
     static async compressPdf(file: File): Promise<Blob> {
+        const { compressPdf: compressPdfLib } = await loadCompress();
         const { bytes } = await compressPdfLib(file, { stripMetadata: true });
         return toPdfBlob(bytes);
     }
 
     /** Render every page to an image; a single page returns the image, many return a ZIP. */
     static async pdfToImages(file: File, format: ImageFormat = 'jpeg'): Promise<Blob> {
+        const { pdfToImages: pdfToImagesLib } = await loadPdfToImage();
         const pages = await pdfToImagesLib(file, { format, scale: 2 });
         if (pages.length === 0) throw new Error('The PDF has no pages to convert.');
         if (pages.length === 1) return pages[0].blob;
@@ -246,6 +270,7 @@ export class PdfService {
 
     static async imageToPdf(files: File[]): Promise<Blob> {
         if (!files.length) throw new Error('Select at least one image.');
+        const { PDFDocument } = await loadPdfLib();
         const doc = await PDFDocument.create();
         for (const file of files) {
             const bytes = new Uint8Array(await file.arrayBuffer());
@@ -264,6 +289,7 @@ export class PdfService {
     }
 
     static async getThumbnails(file: File): Promise<string[]> {
+        const { renderPdfPageThumbnails } = await loadThumbnails();
         const thumbs = await renderPdfPageThumbnails(file, { width: 180 });
         return thumbs.map((t) => t.dataUrl);
     }
@@ -274,7 +300,8 @@ export class PdfService {
      * damaged metadata) that stop other viewers from opening a PDF.
      */
     static async repairPdf(file: File): Promise<Blob> {
-        let doc: PDFDocument;
+        const { PDFDocument } = await loadPdfLib();
+        let doc: Awaited<ReturnType<typeof PDFDocument.load>>;
         try {
             doc = await PDFDocument.load(await file.arrayBuffer(), {
                 ignoreEncryption: true,
@@ -323,7 +350,10 @@ export class PdfService {
         }
 
         onProgress?.('No embedded text — running OCR...');
-        const { default: Tesseract } = await import('tesseract.js');
+        const [{ default: Tesseract }, { pdfToImages: pdfToImagesLib }] = await Promise.all([
+            import('tesseract.js'),
+            loadPdfToImage(),
+        ]);
         const images = await pdfToImagesLib(file, { format: 'png', scale: 2 });
         const chunks: string[] = [];
         for (const image of images) {
@@ -391,9 +421,8 @@ export class PdfService {
 
     /** Spreadsheet into a PDF table, one page per sheet. */
     static async excelToPdf(file: File): Promise<Blob> {
-        const XLSX = await import('xlsx');
+        const [XLSX, { PDFDocument, StandardFonts, rgb }] = await Promise.all([import('xlsx'), loadPdfLib()]);
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-        const { StandardFonts, rgb } = await import('pdf-lib');
         const doc = await PDFDocument.create();
         const font = await doc.embedFont(StandardFonts.Helvetica);
         const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -431,6 +460,7 @@ export class PdfService {
 
     /** Trim margins from every page. */
     static async cropPdf(file: File, margins: CropMargins, options: CropOptions = {}): Promise<Blob> {
+        const { cropPdf: cropPdfLib } = await loadCrop();
         const { bytes } = await cropPdfLib(file, margins, options);
         return toPdfBlob(bytes);
     }
@@ -446,6 +476,7 @@ export class PdfService {
         onProgress?: (percent: number) => void,
     ): Promise<Blob> {
         if (!boxes.length) throw new Error('Draw at least one area to redact.');
+        const { rasterizePages, pdfFromImages } = await loadRasterize();
         const scale = 2;
         const pages = await rasterizePages(file, {
             scale,
@@ -458,6 +489,7 @@ export class PdfService {
 
     /** Stamp a visible signature (drawn or typed). Not a cryptographic signature. */
     static async signPdf(file: File, options: SignOptions): Promise<Blob> {
+        const { signPdf: signPdfLib } = await loadSign();
         const { bytes } = await signPdfLib(file, options);
         return toPdfBlob(bytes);
     }
@@ -468,7 +500,7 @@ export class PdfService {
         annotations: { page: number; x: number; y: number; text: string; size?: number; color?: { r: number; g: number; b: number } }[],
     ): Promise<Blob> {
         if (!annotations.length) throw new Error('Add at least one text box.');
-        const { StandardFonts, rgb } = await import('pdf-lib');
+        const { PDFDocument, StandardFonts, rgb } = await loadPdfLib();
         const doc = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
         const font = await doc.embedFont(StandardFonts.Helvetica);
         const pages = doc.getPages();
@@ -494,6 +526,7 @@ export class PdfService {
 
     /** Compare two PDFs and return a self-contained HTML report. */
     static async comparePdfs(fileA: File, fileB: File): Promise<{ blob: Blob; result: CompareResult }> {
+        const { comparePdfs: comparePdfsLib, comparisonToHtml } = await loadCompare();
         const result = await comparePdfsLib(fileA, fileB);
         const html = comparisonToHtml(result, fileA.name, fileB.name);
         return { blob: new Blob([html], { type: 'text/html;charset=utf-8' }), result };
@@ -501,6 +534,7 @@ export class PdfService {
 
     /** One slide per page, as a .pptx. */
     static async pdfToPowerPoint(file: File, onProgress?: (percent: number) => void): Promise<Blob> {
+        const { pdfToPptx: pdfToPptxLib } = await loadPptx();
         return pdfToPptxLib(file, { onProgress: (percent) => onProgress?.(percent) });
     }
 
@@ -511,6 +545,7 @@ export class PdfService {
      * profile and validation the browser cannot do. The UI says so.
      */
     static async archivePdf(file: File, onProgress?: (percent: number) => void): Promise<Blob> {
+        const { flattenPdf } = await loadRasterize();
         const bytes = await flattenPdf(file, {
             scale: 2,
             format: 'image/jpeg',
@@ -523,6 +558,7 @@ export class PdfService {
     /** Photos of a document -> a clean, high-contrast PDF. */
     static async scanToPdf(images: (File | Blob)[], enhance = true): Promise<Blob> {
         if (!images.length) throw new Error('Capture or select at least one page.');
+        const { PDFDocument } = await loadPdfLib();
         const doc = await PDFDocument.create();
 
         for (const image of images) {
